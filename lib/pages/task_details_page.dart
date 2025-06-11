@@ -15,6 +15,8 @@ class TaskDetailsPage extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final status = assignment?['status'] ?? 'new';
+    final creatorProfile = task['creator_profile'];
+    final assigneeProfile = assignment?['assignee_profile'];
 
     return Scaffold(
       body: CustomScrollView(
@@ -116,7 +118,7 @@ class TaskDetailsPage extends StatelessWidget {
                         child: _buildInfoCard(
                           context,
                           'منشئ المهمة',
-                          task['profiles'],
+                          creatorProfile,
                           Icons.person_outline,
                         ),
                       ),
@@ -125,7 +127,7 @@ class TaskDetailsPage extends StatelessWidget {
                         child: _buildInfoCard(
                           context,
                           'معين إلى',
-                          assignment?['profiles'],
+                          assigneeProfile,
                           Icons.assignment_ind_outlined,
                         ),
                       ),
@@ -164,26 +166,34 @@ class TaskDetailsPage extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundImage: user?['avatar_url'] != null
-                      ? NetworkImage(user!['avatar_url'])
-                      : null,
-                  child: user?['avatar_url'] == null
-                      ? Text(user?['name']?[0].toUpperCase() ?? '?')
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    user?['name'] ?? 'غير معروف',
-                    style: theme.textTheme.bodyLarge,
+            if (user != null) ...[
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundImage: user['avatar_url'] != null
+                        ? NetworkImage(user['avatar_url'])
+                        : null,
+                    child: user['avatar_url'] == null
+                        ? Text(user['name']?[0].toUpperCase() ?? '?')
+                        : null,
                   ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      user['name'] ?? 'غير معروف',
+                      style: theme.textTheme.bodyLarge,
+                    ),
+                  ),
+                ],
+              ),
+            ] else
+              Text(
+                'غير محدد',
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: theme.textTheme.bodySmall?.color,
                 ),
-              ],
-            ),
+              ),
           ],
         ),
       ),
