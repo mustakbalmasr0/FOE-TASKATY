@@ -113,6 +113,7 @@ class _SignupScreenState extends State<SignupScreen> {
           'name': _nameController.text.trim(),
           'full_name': _emailController.text.trim(),
           'avatar_url': avatarUrl,
+          'role': 'user', // Add default role
         });
 
         if (mounted) {
