@@ -14,6 +14,7 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   List<Map<String, dynamic>> _allTasks = [];
+  Map<String, Map<String, dynamic>> _usersCache = {};
   bool _isLoading = false;
   String _selectedFilter = 'الكل';
 
@@ -26,29 +27,95 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<void> _fetchAllTasks() async {
     setState(() => _isLoading = true);
     try {
-      final response = await Supabase.instance.client.from('tasks').select('''
-            *,
-            profiles!tasks_created_by_fkey (
-              id,
-              name,
-              avatar_url
-            ),
-            task_assignments (
-              id,
-              status,
-              user_id,
-              profiles (
-                id,
-                name,
-                avatar_url
-              )
-            )
-          ''').order('created_at', ascending: false);
+      // Step 1: Fetch all tasks
+      final tasksResponse = await Supabase.instance.client
+          .from('tasks')
+          .select('*')
+          .order('created_at', ascending: false);
+
+      if (tasksResponse == null) {
+        setState(() {
+          _allTasks = [];
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final tasks = List<Map<String, dynamic>>.from(tasksResponse);
+
+      // Step 2: Fetch all task assignments
+      final assignmentsResponse = await Supabase.instance.client
+          .from('task_assignments')
+          .select('*');
+
+      final assignments = assignmentsResponse != null 
+          ? List<Map<String, dynamic>>.from(assignmentsResponse)
+          : <Map<String, dynamic>>[];
+
+      // Step 3: Collect all unique user IDs
+      Set<String> userIds = {};
+      
+      // Add creator IDs from tasks
+      for (final task in tasks) {
+        if (task['created_by'] != null) {
+          userIds.add(task['created_by'].toString());
+        }
+      }
+      
+      // Add assignee IDs from assignments
+      for (final assignment in assignments) {
+        if (assignment['user_id'] != null) {
+          userIds.add(assignment['user_id'].toString());
+        }
+      }
+
+      // Step 4: Fetch all user profiles - Fixed column name from 'name' to 'full_name'
+      _usersCache.clear();
+      if (userIds.isNotEmpty) {
+        final usersResponse = await Supabase.instance.client
+            .from('profiles')
+            .select('id, name, avatar_url')
+            .inFilter('id', userIds.toList());
+
+        if (usersResponse != null) {
+          final users = List<Map<String, dynamic>>.from(usersResponse);
+          for (final user in users) {
+            _usersCache[user['id'].toString()] = user;
+          }
+        }
+      }
+
+      // Step 5: Match assignments to tasks and enrich with user data
+      final enrichedTasks = tasks.map((task) {
+        final taskId = task['id'];
+        
+        // Find assignments for this task
+        final taskAssignments = assignments
+            .where((assignment) => assignment['task_id'] == taskId)
+            .map((assignment) {
+              // Add user profile to assignment
+              if (assignment['user_id'] != null) {
+                assignment['assignee_profile'] = _usersCache[assignment['user_id'].toString()];
+              }
+              return assignment;
+            }).toList();
+
+        // Add assignments to task
+        task['task_assignments'] = taskAssignments;
+
+        // Add creator profile to task
+        if (task['created_by'] != null) {
+          task['creator_profile'] = _usersCache[task['created_by'].toString()];
+        }
+
+        return task;
+      }).toList();
 
       if (mounted) {
         setState(() {
-          _allTasks = List<Map<String, dynamic>>.from(response ?? []);
-          debugPrint('Fetched Tasks: $_allTasks'); // Debug print
+          _allTasks = enrichedTasks;
+          debugPrint('Fetched Tasks with Users: ${_allTasks.length} tasks');
+          debugPrint('Users Cache: ${_usersCache.keys.toList()}');
         });
       }
     } catch (e) {
@@ -70,24 +137,33 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> _updateTaskStatus(int taskId, String status) async {
     try {
-      final assignment = await Supabase.instance.client
+      // Find the assignment for this task
+      final assignmentResponse = await Supabase.instance.client
           .from('task_assignments')
-          .update({'status': status})
-          .eq('task_id', taskId)
           .select()
+          .eq('task_id', taskId)
           .single();
 
-      if (mounted) {
-        _fetchAllTasks(); // Refresh tasks after update
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('تم تحديث حالة المهمة إلى: ${_getStatusText(status)}'),
-            backgroundColor: _getStatusColor(status),
-          ),
-        );
+      if (assignmentResponse != null) {
+        // Update the assignment status
+        await Supabase.instance.client
+            .from('task_assignments')
+            .update({'status': status})
+            .eq('id', assignmentResponse['id']);
+
+        if (mounted) {
+          _fetchAllTasks(); // Refresh tasks after update
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text('تم تحديث حالة المهمة إلى: ${_getStatusText(status)}'),
+              backgroundColor: _getStatusColor(status),
+            ),
+          );
+        }
       }
     } catch (e) {
+      debugPrint('Error updating task status: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -260,8 +336,8 @@ class _DashboardPageState extends State<DashboardPage> {
     final assignments = task['task_assignments'] as List<dynamic>?;
     final assignment =
         assignments?.isNotEmpty == true ? assignments?.elementAt(0) : null;
-    final assignee = assignment?['profiles'];
-    final creator = task['profiles'];
+    final assigneeProfile = assignment?['assignee_profile'];
+    final creatorProfile = task['creator_profile'];
     final status = assignment?['status'] ?? 'new';
 
     return Card(
@@ -320,7 +396,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   Expanded(
                     child: _buildUserInfo(
                       'منشئ',
-                      task['profiles'],
+                      creatorProfile,
                       colorScheme,
                       theme,
                     ),
@@ -329,7 +405,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   Expanded(
                     child: _buildUserInfo(
                       'معين إلى',
-                      assignment?['profiles'],
+                      assigneeProfile,
                       colorScheme,
                       theme,
                     ),
@@ -416,11 +492,11 @@ class _DashboardPageState extends State<DashboardPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildUserInfo('منشئ', task['profiles'],
+                  _buildUserInfo('منشئ', task['creator_profile'],
                       Theme.of(context).colorScheme, Theme.of(context)),
                   _buildUserInfo(
                       'معين إلى',
-                      task['task_assignments']?[0]?['profiles'],
+                      task['task_assignments']?[0]?['assignee_profile'],
                       Theme.of(context).colorScheme,
                       Theme.of(context)),
                 ],
@@ -506,8 +582,43 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildUserInfo(String label, Map<String, dynamic>? user,
       ColorScheme colorScheme, ThemeData theme) {
-    final name = user?['name']?.toString() ?? 'غير معروف';
-    final avatarUrl = user?['avatar_url']?.toString();
+    if (user == null) {
+      return Row(
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: colorScheme.primaryContainer,
+            child: Icon(
+              Icons.person,
+              color: colorScheme.onPrimaryContainer,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurface.withOpacity(0.7),
+                ),
+              ),
+              Text(
+                'غير محدد',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    // Fixed: Use _name' instead of 'name' to match the database schema
+    final name = user['name']?.toString() ?? 'غير معروف';
+    final avatarUrl = user['avatar_url']?.toString();
 
     return Row(
       children: [
@@ -519,7 +630,7 @@ class _DashboardPageState extends State<DashboardPage> {
               : null,
           child: avatarUrl == null || avatarUrl.isEmpty
               ? Text(
-                  name[0].toUpperCase(),
+                  name.isNotEmpty ? name[0].toUpperCase() : '?',
                   style: TextStyle(
                     color: colorScheme.onPrimaryContainer,
                     fontWeight: FontWeight.bold,
@@ -528,22 +639,26 @@ class _DashboardPageState extends State<DashboardPage> {
               : null,
         ),
         const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurface.withOpacity(0.7),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurface.withOpacity(0.7),
+                ),
               ),
-            ),
-            Text(
-              name,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
+              Text(
+                name,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
