@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:taskaty/router/auth_router.dart';
 import 'package:taskaty/pages/dashboard.dart';
 import 'package:taskaty/pages/admin_page.dart';
+import 'package:taskaty/pages/user_page.dart';
+import 'package:taskaty/auth/login.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,13 +47,104 @@ class MyApp extends StatelessWidget {
           child: child!,
         );
       },
+      home: const LoginScreen(),
       routes: {
-        '/': (context) => const AuthRouter(),
+        '/login': (context) => const LoginScreen(),
+        '/auth': (context) => const AuthRouter(),
         '/admin/dashboard': (context) => const DashboardPage(),
         '/admin/create-task': (context) => const AdminDashboard(),
+        '/user/dashboard': (context) => const UserDashboard(),
       },
-      initialRoute: '/',
       debugShowCheckedModeBanner: false,
     );
+  }
+}
+
+class AuthStateScreen extends StatefulWidget {
+  const AuthStateScreen({super.key});
+
+  @override
+  State<AuthStateScreen> createState() => _AuthStateScreenState();
+}
+
+class _AuthStateScreenState extends State<AuthStateScreen> {
+  late final StreamSubscription<AuthState> _authStateSubscription;
+  User? _user;
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeAuth();
+  }
+
+  Future<void> _initializeAuth() async {
+    final session = Supabase.instance.client.auth.currentSession;
+
+    if (mounted) {
+      setState(() {
+        _user = session?.user;
+        _isInitialized = true;
+      });
+    }
+
+    _authStateSubscription =
+        Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      final AuthChangeEvent event = data.event;
+      final Session? session = data.session;
+
+      if (mounted) {
+        setState(() {
+          _user = session?.user;
+        });
+      }
+
+      if (event == AuthChangeEvent.signedIn) {
+        _handleSignedIn(session?.user);
+      } else if (event == AuthChangeEvent.signedOut) {
+        _navigateToAuth();
+      }
+    });
+  }
+
+  void _handleSignedIn(User? user) {
+    if (!mounted) return;
+    if (user?.userMetadata?['role'] == 'admin') {
+      Navigator.of(context).pushReplacementNamed('/admin/dashboard');
+    } else {
+      Navigator.of(context).pushReplacementNamed('/user/dashboard');
+    }
+  }
+
+  void _navigateToAuth() {
+    if (!mounted) return;
+    Navigator.of(context).pushReplacementNamed('/auth');
+  }
+
+  @override
+  void dispose() {
+    _authStateSubscription.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isInitialized) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_user == null) {
+      return const AuthRouter();
+    }
+
+    if (_user?.userMetadata?['role'] == 'admin') {
+      return const DashboardPage();
+    }
+
+    return const UserDashboard();
   }
 }
