@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class TaskDetailsPage extends StatefulWidget {
   final Map<String, dynamic> task;
@@ -18,6 +20,7 @@ class TaskDetailsPage extends StatefulWidget {
 class _TaskDetailsState extends State<TaskDetailsPage> {
   bool _isEditing = false;
   bool _isSaving = false;
+  bool _isUploadingFile = false;
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _startDateController = TextEditingController();
@@ -27,11 +30,13 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
   final _formKey = GlobalKey<FormState>();
   DateTime? _startDate;
   DateTime? _endDate;
+  List<Map<String, dynamic>> _attachments = [];
 
   @override
   void initState() {
     super.initState();
     _initializeControllers();
+    _loadAttachments();
   }
 
   void _initializeControllers() {
@@ -122,6 +127,108 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _loadAttachments() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('task_attachments')
+          .select()
+          .eq('task_id', widget.task['id']);
+
+      if (mounted) {
+        setState(() {
+          _attachments = List<Map<String, dynamic>>.from(response);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading attachments: $e');
+    }
+  }
+
+  Future<void> _pickAndUploadFile() async {
+    try {
+      setState(() => _isUploadingFile = true);
+
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: false,
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
+
+      // Upload to Supabase Storage
+      await Supabase.instance.client.storage
+          .from('files')
+          .uploadBinary(fileName, file.bytes!);
+
+      // Get the public URL
+      final fileUrl =
+          Supabase.instance.client.storage.from('files').getPublicUrl(fileName);
+
+      // Save attachment record
+      final response = await Supabase.instance.client
+          .from('task_attachments')
+          .insert({
+            'task_id': widget.task['id'],
+            'file_name': file.name,
+            'file_url': fileUrl,
+            'file_type': file.extension,
+            'uploaded_by': Supabase.instance.client.auth.currentUser!.id,
+          })
+          .select()
+          .single();
+
+      if (mounted) {
+        setState(() {
+          _attachments.add(response);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم رفع الملف بنجاح')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في رفع الملف: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingFile = false);
+    }
+  }
+
+  IconData _getFileIcon(String? fileType) {
+    switch (fileType?.toLowerCase()) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return Icons.image;
+      case 'doc':
+      case 'docx':
+        return Icons.document_scanner;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
+  Future<void> _downloadFile(String url) async {
+    try {
+      if (!await launchUrl(Uri.parse(url))) {
+        throw 'Could not launch $url';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في فتح الملف: ${e.toString()}')),
+        );
+      }
     }
   }
 
@@ -434,6 +541,11 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
 
                     const SizedBox(height: 24),
 
+                    // Attachments
+                    _buildAttachmentsList(),
+
+                    const SizedBox(height: 24),
+
                     // Assignment Info
                     Row(
                       children: [
@@ -739,5 +851,62 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
   String _formatDate(String dateString) {
     final date = DateTime.parse(dateString).toLocal();
     return '${date.year}-${date.month}-${date.day}';
+  }
+
+  Widget _buildAttachmentsList() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'المرفقات',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            if (_isEditing)
+              IconButton(
+                icon: _isUploadingFile
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.attach_file),
+                onPressed: _isUploadingFile ? null : _pickAndUploadFile,
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_attachments.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceVariant,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text('لا توجد مرفقات'),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _attachments.length,
+            itemBuilder: (context, index) {
+              final attachment = _attachments[index];
+              return Card(
+                child: ListTile(
+                  leading: Icon(_getFileIcon(attachment['file_type'])),
+                  title: Text(attachment['file_name']),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.download),
+                    onPressed: () => _downloadFile(attachment['file_url']),
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
   }
 }
