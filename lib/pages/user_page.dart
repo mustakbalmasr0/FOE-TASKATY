@@ -56,24 +56,25 @@ class _UserDashboardState extends State<UserDashboard>
     setState(() => _isLoading = true);
     try {
       final userId = Supabase.instance.client.auth.currentUser!.id;
-      final response = await Supabase.instance.client
-          .from('task_assignments')
-          .select('''
-            task_id,
-            tasks (
+      final response =
+          await Supabase.instance.client.from('task_assignments').select('''
+            id,
+            status,
+            created_at,
+            end_at,
+            task:tasks (
               id,
               title,
               description,
+              priority,
               created_at,
-              status,
-              created_by,
-              profiles (
-                name
+              end_at,
+              creator:profiles!created_by (
+                name,
+                avatar_url
               )
             )
-          ''')
-          .eq('user_id', userId)
-          .order('tasks.created_at', ascending: false);
+          ''').eq('user_id', userId).order('created_at', ascending: false);
 
       if (!mounted) return;
       setState(() {
@@ -81,8 +82,8 @@ class _UserDashboardState extends State<UserDashboard>
       });
       _animationController.forward();
     } catch (e) {
+      debugPrint('Error fetching tasks: $e');
       if (!mounted) return;
-      // Only show error if not during initial load
       if (_tasks.isNotEmpty) {
         _showSnackBar('خطأ في جلب المهام: ${e.toString()}', isError: true);
       }
@@ -206,6 +207,50 @@ class _UserDashboardState extends State<UserDashboard>
         return Icons.task_alt;
       default:
         return Icons.fiber_new;
+    }
+  }
+
+  String _formatArabicDate(String? dateStr) {
+    if (dateStr == null) return 'تاريخ غير معروف';
+    final date = DateTime.parse(dateStr);
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    final List<String> arabicMonths = [
+      'يناير',
+      'فبراير',
+      'مارس',
+      'إبريل',
+      'مايو',
+      'يونيو',
+      'يوليو',
+      'أغسطس',
+      'سبتمبر',
+      'أكتوبر',
+      'نوفمبر',
+      'ديسمبر'
+    ];
+
+    final List<String> arabicDays = [
+      'الأحد',
+      'الإثنين',
+      'الثلاثاء',
+      'الأربعاء',
+      'الخميس',
+      'الجمعة',
+      'السبت'
+    ];
+
+    if (difference.inDays == 0) {
+      return 'اليوم';
+    } else if (difference.inDays == 1) {
+      return 'أمس';
+    } else if (difference.inDays < 7) {
+      return 'قبل ${difference.inDays} أيام';
+    } else {
+      final dayName = arabicDays[date.weekday % 7];
+      final monthName = arabicMonths[date.month - 1];
+      return '$dayName، ${date.day} $monthName ${date.year}';
     }
   }
 
@@ -349,23 +394,27 @@ class _UserDashboardState extends State<UserDashboard>
                     ? SliverFillRemaining(
                         child: _buildEmptyState(colorScheme, theme),
                       )
-                    : SliverPadding(
-                        padding: const EdgeInsets.all(16.0),
-                        sliver: FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: SliverList(
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) {
-                                return _buildTaskCard(
-                                  _tasks[index],
+                    : SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final task = _tasks[index];
+                            return FadeTransition(
+                              opacity: _fadeAnimation,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16.0,
+                                  vertical: 8.0,
+                                ),
+                                child: _buildTaskCard(
+                                  task,
                                   index,
                                   colorScheme,
                                   theme,
-                                );
-                              },
-                              childCount: _tasks.length,
-                            ),
-                          ),
+                                ),
+                              ),
+                            );
+                          },
+                          childCount: _tasks.length,
                         ),
                       ),
           ],
@@ -507,15 +556,24 @@ class _UserDashboardState extends State<UserDashboard>
   }
 
   Widget _buildTaskCard(
-    Map<String, dynamic> taskData,
+    Map<String, dynamic> assignment,
     int index,
     ColorScheme colorScheme,
     ThemeData theme,
   ) {
-    final task = taskData['tasks'];
-    final status = task['status'] ?? 'new';
+    final task = assignment['task'] as Map<String, dynamic>;
+    final status = assignment['status'] ?? 'new';
     final statusColor = _getStatusColor(status);
-    final createdBy = task['profiles']?['name'] ?? 'غير معروف';
+    final creator = task['creator'] as Map<String, dynamic>;
+    final priority = task['priority'] ?? 'عادي';
+
+    // Filter tasks based on selected filter
+    if (_selectedFilter != 'الكل') {
+      final arabicStatus = _getStatusText(status);
+      if (arabicStatus != _selectedFilter) {
+        return const SizedBox.shrink();
+      }
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -527,7 +585,7 @@ class _UserDashboardState extends State<UserDashboard>
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: () => _showTaskDetails(task, status, colorScheme, theme),
+          onTap: () => _showTaskDetails(task, priority, colorScheme, theme),
           child: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -574,7 +632,7 @@ class _UserDashboardState extends State<UserDashboard>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'بواسطة: $createdBy',
+                              'بواسطة: ${creator['name'] ?? 'غير معروف'}',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: colorScheme.onSurface.withOpacity(0.7),
                               ),
@@ -588,13 +646,13 @@ class _UserDashboardState extends State<UserDashboard>
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: statusColor.withOpacity(0.1),
+                          color: _getPriorityColor(priority).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          _getStatusText(status),
+                          priority,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: statusColor,
+                            color: _getPriorityColor(priority),
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -626,18 +684,74 @@ class _UserDashboardState extends State<UserDashboard>
                   ],
                   const SizedBox(height: 12),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Icon(
-                        Icons.access_time,
-                        size: 16,
-                        color: colorScheme.onSurface.withOpacity(0.5),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _formatDate(task['created_at']),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurface.withOpacity(0.5),
-                        ),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color:
+                                  colorScheme.surfaceContainer.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: colorScheme.outline.withOpacity(0.2),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.calendar_today_outlined,
+                                  size: 14,
+                                  color: colorScheme.primary,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _formatArabicDate(task['created_at']),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.primary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color:
+                                  colorScheme.errorContainer.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: colorScheme.error.withOpacity(0.2),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.event_busy_outlined,
+                                  size: 14,
+                                  color: colorScheme.error,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'ينتهي: ${_formatArabicDate(task['end_at'])}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.error,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

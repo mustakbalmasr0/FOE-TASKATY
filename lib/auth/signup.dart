@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:google_fonts/google_fonts.dart' as gfonts;
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -71,18 +71,15 @@ class _SignupScreenState extends State<SignupScreen> {
         if (_imageBytes != null && _imageName != null) {
           final userId = response.user!.id;
           try {
-            final String mimeType = _imageName!.endsWith('.png')
-                ? 'image/png'
-                : 'image/jpeg';
+            final String mimeType =
+                _imageName!.endsWith('.png') ? 'image/png' : 'image/jpeg';
 
             // Create unique filename
             final timestamp = DateTime.now().millisecondsSinceEpoch;
             final uniqueFilename = '${userId}_${timestamp}_${_imageName}';
 
             // Upload image to Supabase Storage
-            await supabase.storage
-                .from('profile')
-                .uploadBinary(
+            await supabase.storage.from('profile').uploadBinary(
                   uniqueFilename,
                   _imageBytes!,
                   fileOptions: FileOptions(
@@ -92,9 +89,8 @@ class _SignupScreenState extends State<SignupScreen> {
                 );
 
             // Get the public URL of the uploaded image
-            avatarUrl = supabase.storage
-                .from('profile')
-                .getPublicUrl(uniqueFilename);
+            avatarUrl =
+                supabase.storage.from('profile').getPublicUrl(uniqueFilename);
           } catch (e) {
             print('Storage error details: $e');
             if (e is StorageException) {
@@ -154,7 +150,7 @@ class _SignupScreenState extends State<SignupScreen> {
         ),
         child: SafeArea(
           child: Center(
-            child: SingleChildScrollView(
+            child: Padding(
               padding: const EdgeInsets.all(24.0),
               child: Form(
                 key: _formKey,
@@ -163,7 +159,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   children: [
                     Text(
                       'إنشاء حساب',
-                      style: GoogleFonts.poppins(
+                      style: gfonts.GoogleFonts.poppins(
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -172,7 +168,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'انضم إلينا اليوم',
-                      style: GoogleFonts.poppins(
+                      style: gfonts.GoogleFonts.poppins(
                         fontSize: 16,
                         color: Colors.white70,
                       ),
@@ -269,7 +265,7 @@ class _SignupScreenState extends State<SignupScreen> {
                             ),
                             child: Text(
                               'إنشاء حساب',
-                              style: GoogleFonts.poppins(
+                              style: gfonts.GoogleFonts.poppins(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -287,7 +283,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       },
                       child: Text(
                         'هل لديك حساب؟ تسجيل الدخول',
-                        style: GoogleFonts.poppins(
+                        style: gfonts.GoogleFonts.poppins(
                           color: Colors.white,
                           fontSize: 14,
                         ),
@@ -316,7 +312,7 @@ class _SignupScreenState extends State<SignupScreen> {
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: GoogleFonts.poppins(color: Colors.white70),
+        labelStyle: gfonts.GoogleFonts.poppins(color: Colors.white70),
         prefixIcon: Icon(icon, color: Colors.white70),
         filled: true,
         fillColor: Colors.white.withOpacity(0.2),
