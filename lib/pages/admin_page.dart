@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:file_picker/file_picker.dart';
 
 class AdminDashboard extends StatefulWidget {
   static const route = '/admin/create-task';
@@ -19,6 +20,9 @@ class _AdminDashboardState extends State<AdminDashboard>
   String? _selectedUserId;
   List<Map<String, dynamic>> _users = [];
   bool _isLoading = false;
+  bool _isUploadingFiles = false;
+  List<PlatformFile> _selectedFiles = [];
+
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   DateTime? _startDate;
@@ -88,7 +92,7 @@ class _AdminDashboardState extends State<AdminDashboard>
     setState(() => _isLoading = true);
 
     try {
-      // Insert the task into the `tasks` table
+      // Insert task
       final taskResponse = await Supabase.instance.client.from('tasks').insert({
         'title': _titleController.text.trim(),
         'description': _descriptionController.text.trim(),
@@ -98,7 +102,37 @@ class _AdminDashboardState extends State<AdminDashboard>
         'priority': _selectedPriority,
       }).select();
 
-      final taskId = taskResponse[0]['id'];
+      final taskId = taskResponse[0]['id'] as int; // Ensure it's treated as int
+
+      // Upload attachments if any
+      if (_selectedFiles.isNotEmpty) {
+        setState(() => _isUploadingFiles = true);
+
+        for (var file in _selectedFiles) {
+          if (file.bytes != null) {
+            final fileName =
+                '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
+
+            // Upload to Storage
+            await Supabase.instance.client.storage
+                .from('files')
+                .uploadBinary(fileName, file.bytes!);
+
+            // Get URL and save record
+            final fileUrl = Supabase.instance.client.storage
+                .from('files')
+                .getPublicUrl(fileName);
+
+            await Supabase.instance.client.from('task_attachments').insert({
+              'task_id': taskId, // Using the integer taskId directly
+              'file_name': file.name,
+              'file_url': fileUrl,
+              'file_type': file.extension,
+              'uploaded_by': Supabase.instance.client.auth.currentUser!.id,
+            });
+          }
+        }
+      }
 
       await Supabase.instance.client.from('task_assignments').insert({
         'task_id': taskId,
@@ -120,7 +154,10 @@ class _AdminDashboardState extends State<AdminDashboard>
       }
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _isUploadingFiles = false;
+        });
       }
     }
   }
@@ -136,6 +173,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       _endDate = null;
       _selectedPriority = 'عادي';
       _selectedStatus = 'new';
+      _selectedFiles.clear();
     });
   }
 
@@ -221,6 +259,81 @@ class _AdminDashboardState extends State<AdminDashboard>
         return Colors.blue;
       default:
         return Colors.grey;
+    }
+  }
+
+  Future<void> _pickFiles() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.any,
+        withData: true,
+      );
+
+      if (result != null) {
+        setState(() {
+          _selectedFiles.addAll(result.files);
+        });
+      }
+    } catch (e) {
+      _showSnackBar('خطأ في اختيار الملفات: ${e.toString()}', isError: true);
+    }
+  }
+
+  Widget _buildAttachmentsList() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceVariant,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            title: Text('المرفقات',
+                style: Theme.of(context).textTheme.titleMedium),
+            trailing: IconButton(
+              icon: const Icon(Icons.attach_file),
+              onPressed: _pickFiles,
+            ),
+          ),
+          if (_selectedFiles.isNotEmpty)
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _selectedFiles.length,
+              itemBuilder: (context, index) {
+                final file = _selectedFiles[index];
+                return ListTile(
+                  leading: Icon(_getFileIcon(file.extension)),
+                  title: Text(file.name),
+                  subtitle: Text('${(file.size / 1024).toStringAsFixed(2)} KB'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () =>
+                        setState(() => _selectedFiles.removeAt(index)),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  IconData _getFileIcon(String? fileType) {
+    switch (fileType?.toLowerCase()) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return Icons.image;
+      case 'doc':
+      case 'docx':
+        return Icons.document_scanner;
+      default:
+        return Icons.insert_drive_file;
     }
   }
 
@@ -472,7 +585,9 @@ class _AdminDashboardState extends State<AdminDashboard>
                               },
                             ),
 
-                            const SizedBox(height: 32),
+                            const SizedBox(height: 20),
+                            _buildAttachmentsList(),
+                            const SizedBox(height: 20),
 
                             // Action Buttons
                             Row(
