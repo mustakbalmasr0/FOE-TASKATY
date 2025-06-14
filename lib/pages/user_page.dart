@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class UserDashboard extends StatefulWidget {
   const UserDashboard({super.key});
@@ -16,6 +17,7 @@ class _UserDashboardState extends State<UserDashboard>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   Map<String, dynamic>? _userProfile;
+  List<Map<String, dynamic>> _taskAttachments = [];
 
   final List<String> _filterOptions = [
     'الكل',
@@ -109,6 +111,29 @@ class _UserDashboardState extends State<UserDashboard>
       }
     } catch (e) {
       debugPrint('Error fetching user profile: $e');
+    }
+  }
+
+  Future<void> _fetchTaskAttachments(dynamic taskId) async {
+    try {
+      // Convert taskId to integer since that's what the database expects
+      final int parsedTaskId =
+          taskId is String ? int.parse(taskId) : taskId as int;
+
+      final response = await Supabase.instance.client
+          .from('task_attachments')
+          .select()
+          .eq('task_id', parsedTaskId);
+
+      if (mounted) {
+        setState(() {
+          _taskAttachments = List<Map<String, dynamic>>.from(response);
+        });
+      }
+
+      debugPrint('Fetched attachments: $_taskAttachments'); // Debug log
+    } catch (e) {
+      debugPrint('Error loading attachments: $e');
     }
   }
 
@@ -251,6 +276,34 @@ class _UserDashboardState extends State<UserDashboard>
       final dayName = arabicDays[date.weekday % 7];
       final monthName = arabicMonths[date.month - 1];
       return '$dayName، ${date.day} $monthName ${date.year}';
+    }
+  }
+
+  IconData _getFileIcon(String? fileType) {
+    switch (fileType?.toLowerCase()) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return Icons.image;
+      case 'doc':
+      case 'docx':
+        return Icons.document_scanner;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
+  Future<void> _downloadFile(String url) async {
+    try {
+      if (!await launchUrl(Uri.parse(url))) {
+        throw 'Could not launch $url';
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('خطأ في فتح الملف: ${e.toString()}', isError: true);
+      }
     }
   }
 
@@ -585,7 +638,8 @@ class _UserDashboardState extends State<UserDashboard>
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: () => _showTaskDetails(task, priority, colorScheme, theme),
+          onTap: () => _showTaskDetails(
+              assignment, status, priority, colorScheme, theme),
           child: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -830,147 +884,218 @@ class _UserDashboardState extends State<UserDashboard>
   }
 
   void _showTaskDetails(
-    Map<String, dynamic> task,
+    Map<String, dynamic> assignment,
+    String status,
     String priority,
     ColorScheme colorScheme,
     ThemeData theme,
   ) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: Container(
-          padding: EdgeInsets.only(
-            top: 24,
-            left: 24,
-            right: 24,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-          ),
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(24),
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: colorScheme.onSurface.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(2),
+    // Clear previous attachments
+    setState(() => _taskAttachments.clear());
+
+    // Access task data from the assignment
+    final task = assignment['task'] as Map<String, dynamic>;
+    final taskId = task['id'];
+
+    if (taskId != null) {
+      _fetchTaskAttachments(taskId).then((_) {
+        if (!mounted) return;
+
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (context) => StatefulBuilder(
+            builder: (context, setModalState) => Directionality(
+              textDirection: TextDirection.rtl,
+              child: Container(
+                padding: EdgeInsets.only(
+                  top: 24,
+                  left: 24,
+                  right: 24,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                ),
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: _getPriorityColor(priority).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      _getPriorityIcon(priority),
-                      color: _getPriorityColor(priority),
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: colorScheme.onSurface.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Title and Priority
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color:
+                                  _getPriorityColor(priority).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              _getPriorityIcon(priority),
+                              color: _getPriorityColor(priority),
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  task['title'] ?? 'مهمة بدون عنوان',
+                                  style:
+                                      theme.textTheme.headlineSmall?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _getPriorityColor(priority)
+                                        .withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    'أولوية $priority',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: _getPriorityColor(priority),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Description
+                      if (assignment['task']['description'] != null &&
+                          assignment['task']['description'].isNotEmpty) ...[
                         Text(
-                          task['title'] ?? 'مهمة بدون عنوان',
-                          style: theme.textTheme.headlineSmall?.copyWith(
+                          'الوصف',
+                          style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: _getPriorityColor(priority).withOpacity(0.1),
+                            color: colorScheme.surfaceContainer,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
-                            'أولوية $priority',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: _getPriorityColor(priority),
-                              fontWeight: FontWeight.bold,
+                            assignment['task']['description'],
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              height: 1.5,
                             ),
                           ),
                         ),
+                        const SizedBox(height: 24),
                       ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              if (task['description'] != null &&
-                  task['description'].isNotEmpty) ...[
-                Text(
-                  'الوصف',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    task['description'],
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      height: 1.5,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-              ],
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('إغلاق'),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _showSnackBar('تم تحديث حالة المهمة', isError: false);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: colorScheme.primary,
-                        foregroundColor: colorScheme.onPrimary,
+
+                      // Attachments
+                      Text(
+                        'المرفقات',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                      child: const Text('تحديث الحالة'),
-                    ),
+                      const SizedBox(height: 8),
+
+                      // Display attachments
+                      if (_taskAttachments.isEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceVariant,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text('لا توجد مرفقات'),
+                        )
+                      else
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _taskAttachments.length,
+                          itemBuilder: (context, index) {
+                            final attachment = _taskAttachments[index];
+                            return Card(
+                              child: ListTile(
+                                leading:
+                                    Icon(_getFileIcon(attachment['file_type'])),
+                                title: Text(attachment['file_name']),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.download),
+                                  onPressed: () =>
+                                      _downloadFile(attachment['file_url']),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+
+                      const SizedBox(height: 24),
+
+                      // Action buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('إغلاق'),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _showSnackBar('تم تحديث حالة المهمة',
+                                    isError: false);
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: colorScheme.primary,
+                                foregroundColor: colorScheme.onPrimary,
+                              ),
+                              child: const Text('تحديث الحالة'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ],
+            ),
           ),
-        ),
-      ),
-    );
+        );
+      });
+    }
   }
 }
