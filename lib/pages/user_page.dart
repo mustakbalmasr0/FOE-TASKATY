@@ -330,85 +330,105 @@ class _UserDashboardState extends State<UserDashboard>
                   icon: const Icon(Icons.logout, color: Colors.white),
                   onPressed: () async {
                     await Supabase.instance.client.auth.signOut();
+                    if (mounted) {
+                      Navigator.of(context)
+                          .pushNamedAndRemoveUntil('/', (route) => false);
+                    }
                   },
                 ),
               ],
               flexibleSpace: FlexibleSpaceBar(
-                background: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        colorScheme.primary,
-                        colorScheme.primary.withOpacity(0.8),
-                        colorScheme.secondary,
-                      ],
+                background: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Background image (same as in task_details_page.dart)
+                    Image.asset(
+                      'assets/background.jpg',
+                      fit: BoxFit.cover,
                     ),
-                  ),
-                  child: SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 24,
-                                backgroundColor: Colors.white.withOpacity(0.2),
-                                backgroundImage: _userProfile?['avatar_url'] !=
-                                        null
-                                    ? NetworkImage(_userProfile!['avatar_url'])
-                                    : null,
-                                child: _userProfile?['avatar_url'] == null
-                                    ? Icon(
-                                        Icons.person,
-                                        color: Colors.white,
-                                        size: 28,
-                                      )
-                                    : null,
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'مرحباً${_userProfile?['name'] != null ? ' ${_userProfile!['name']}' : ''}',
-                                      style:
-                                          theme.textTheme.bodyLarge?.copyWith(
-                                        color: Colors.white.withOpacity(0.9),
-                                      ),
-                                    ),
-                                    Text(
-                                      'مهامك المعيّنة',
-                                      style: theme.textTheme.headlineSmall
-                                          ?.copyWith(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: () {
-                                  _fetchTasks();
-                                  _fetchUserProfile();
-                                },
-                                icon: const Icon(
-                                  Icons.refresh,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                    // Gradient overlay and content
+                    /*
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            colorScheme.primary.withOpacity(0.85),
+                            colorScheme.primary.withOpacity(0.7),
+                            colorScheme.secondary.withOpacity(0.7),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
+                    */
+                    SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 24,
+                                  backgroundColor:
+                                      Colors.white.withOpacity(0.2),
+                                  backgroundImage:
+                                      _userProfile?['avatar_url'] != null
+                                          ? NetworkImage(
+                                              _userProfile!['avatar_url'])
+                                          : null,
+                                  child: _userProfile?['avatar_url'] == null
+                                      ? Icon(
+                                          Icons.person,
+                                          color: Colors.white,
+                                          size: 28,
+                                        )
+                                      : null,
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'مرحباً${_userProfile?['name'] != null ? ' ${_userProfile!['name']}' : ''}',
+                                        style:
+                                            theme.textTheme.bodyLarge?.copyWith(
+                                          color: Colors.white.withOpacity(0.9),
+                                        ),
+                                      ),
+                                      Text(
+                                        'مهامك المعيّنة',
+                                        style: theme.textTheme.headlineSmall
+                                            ?.copyWith(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: () {
+                                    _fetchTasks();
+                                    _fetchUserProfile();
+                                  },
+                                  icon: const Icon(
+                                    Icons.refresh,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -577,7 +597,6 @@ class _UserDashboardState extends State<UserDashboard>
       margin: const EdgeInsets.only(bottom: 16),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        reverse: true,
         itemCount: _filterOptions.length,
         itemBuilder: (context, index) {
           final filter = _filterOptions[index];
