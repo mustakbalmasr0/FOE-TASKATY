@@ -44,24 +44,23 @@ class _DashboardPageState extends State<DashboardPage> {
       final tasks = List<Map<String, dynamic>>.from(tasksResponse);
 
       // Step 2: Fetch all task assignments
-      final assignmentsResponse = await Supabase.instance.client
-          .from('task_assignments')
-          .select('*');
+      final assignmentsResponse =
+          await Supabase.instance.client.from('task_assignments').select('*');
 
-      final assignments = assignmentsResponse != null 
+      final assignments = assignmentsResponse != null
           ? List<Map<String, dynamic>>.from(assignmentsResponse)
           : <Map<String, dynamic>>[];
 
       // Step 3: Collect all unique user IDs
       Set<String> userIds = {};
-      
+
       // Add creator IDs from tasks
       for (final task in tasks) {
         if (task['created_by'] != null) {
           userIds.add(task['created_by'].toString());
         }
       }
-      
+
       // Add assignee IDs from assignments
       for (final assignment in assignments) {
         if (assignment['user_id'] != null) {
@@ -88,17 +87,18 @@ class _DashboardPageState extends State<DashboardPage> {
       // Step 5: Match assignments to tasks and enrich with user data
       final enrichedTasks = tasks.map((task) {
         final taskId = task['id'];
-        
+
         // Find assignments for this task
         final taskAssignments = assignments
             .where((assignment) => assignment['task_id'] == taskId)
             .map((assignment) {
-              // Add user profile to assignment
-              if (assignment['user_id'] != null) {
-                assignment['assignee_profile'] = _usersCache[assignment['user_id'].toString()];
-              }
-              return assignment;
-            }).toList();
+          // Add user profile to assignment
+          if (assignment['user_id'] != null) {
+            assignment['assignee_profile'] =
+                _usersCache[assignment['user_id'].toString()];
+          }
+          return assignment;
+        }).toList();
 
         // Add assignments to task
         task['task_assignments'] = taskAssignments;
@@ -148,8 +148,7 @@ class _DashboardPageState extends State<DashboardPage> {
         // Update the assignment status
         await Supabase.instance.client
             .from('task_assignments')
-            .update({'status': status})
-            .eq('id', assignmentResponse['id']);
+            .update({'status': status}).eq('id', assignmentResponse['id']);
 
         if (mounted) {
           _fetchAllTasks(); // Refresh tasks after update
@@ -182,86 +181,101 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('لوحة المتابعة'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _fetchAllTasks,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset(
+              'assets/background.jpg',
+              fit: BoxFit.cover,
             ),
-            IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: () async {
-                await Supabase.instance.client.auth.signOut();
+          ),
+          Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(
+              title: const Text('لوحة المتابعة'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _fetchAllTasks,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.logout),
+                  onPressed: () async {
+                    await Supabase.instance.client.auth.signOut();
+                    if (mounted) {
+                      Navigator.of(context)
+                          .pushNamedAndRemoveUntil('/', (route) => false);
+                    }
+                  },
+                ),
+              ],
+            ),
+            floatingActionButton: FloatingActionButton.extended(
+              onPressed: () {
+                Navigator.of(context).pushNamed(AdminDashboard.route).then((_) {
+                  // Refresh tasks when returning from create task page
+                  _fetchAllTasks();
+                });
               },
+              icon: const Icon(Icons.add_task),
+              label: const Text('إنشاء مهمة'),
             ),
-          ],
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () {
-            Navigator.of(context).pushNamed(AdminDashboard.route).then((_) {
-              // Refresh tasks when returning from create task page
-              _fetchAllTasks();
-            });
-          },
-          icon: const Icon(Icons.add_task),
-          label: const Text('إنشاء مهمة'),
-        ),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _allTasks.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.assignment_outlined,
-                          size: 64,
-                          color: colorScheme.primary.withOpacity(0.5),
+            body: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _allTasks.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.assignment_outlined,
+                              size: 64,
+                              color: colorScheme.primary.withOpacity(0.5),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'لا توجد مهام حالياً',
+                              style: theme.textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'قم بإنشاء مهمة جديدة باستخدام زر إنشاء مهمة',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.textTheme.bodySmall?.color,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'لا توجد مهام حالياً',
-                          style: theme.textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'قم بإنشاء مهمة جديدة باستخدام زر إنشاء مهمة',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.textTheme.bodySmall?.color,
+                      )
+                    : CustomScrollView(
+                        slivers: [
+                          SliverToBoxAdapter(
+                            child: _buildStatsCard(colorScheme, theme),
                           ),
-                        ),
-                      ],
-                    ),
-                  )
-                : CustomScrollView(
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: _buildStatsCard(colorScheme, theme),
+                          SliverPadding(
+                            padding: const EdgeInsets.all(16),
+                            sliver: SliverGrid(
+                              gridDelegate:
+                                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 400,
+                                mainAxisSpacing: 16,
+                                crossAxisSpacing: 16,
+                                mainAxisExtent: 200,
+                              ),
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) {
+                                  if (index >= _allTasks.length) return null;
+                                  return _buildTaskCard(
+                                      _allTasks[index], colorScheme, theme);
+                                },
+                                childCount: _allTasks.length,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      SliverPadding(
-                        padding: const EdgeInsets.all(16),
-                        sliver: SliverGrid(
-                          gridDelegate:
-                              const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 400,
-                            mainAxisSpacing: 16,
-                            crossAxisSpacing: 16,
-                            mainAxisExtent: 200,
-                          ),
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              if (index >= _allTasks.length) return null;
-                              return _buildTaskCard(
-                                  _allTasks[index], colorScheme, theme);
-                            },
-                            childCount: _allTasks.length,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+          ),
+        ],
       ),
     );
   }
@@ -358,61 +372,65 @@ class _DashboardPageState extends State<DashboardPage> {
         borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      task['title'] ?? 'بدون عنوان',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+          child: SingleChildScrollView(
+            // <-- Wrap Column with SingleChildScrollView
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        task['title'] ?? 'بدون عنوان',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  _buildStatusChip(status, colorScheme),
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (task['description'] != null) ...[
-                Text(
-                  task['description'],
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface.withOpacity(0.8),
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                    _buildStatusChip(status, colorScheme),
+                  ],
                 ),
                 const SizedBox(height: 8),
-              ],
-              const Spacer(),
-              const Divider(),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: _buildUserInfo(
-                      'منشئ',
-                      creatorProfile,
-                      colorScheme,
-                      theme,
+                if (task['description'] != null) ...[
+                  Text(
+                    task['description'],
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurface.withOpacity(0.8),
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildUserInfo(
-                      'معين إلى',
-                      assigneeProfile,
-                      colorScheme,
-                      theme,
-                    ),
-                  ),
+                  const SizedBox(height: 8),
                 ],
-              ),
-            ],
+                const SizedBox(height: 8),
+                const Divider(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: _buildUserInfo(
+                        'منشئ',
+                        creatorProfile,
+                        colorScheme,
+                        theme,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildUserInfo(
+                        'معين إلى',
+                        assigneeProfile,
+                        colorScheme,
+                        theme,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

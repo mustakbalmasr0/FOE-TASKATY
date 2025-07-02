@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:taskaty/auth/signup.dart';
-import 'package:taskaty/pages/dashboard.dart';
-import 'package:taskaty/pages/user_page.dart';
+import 'package:taskaty/auth/signup.dart'; // Assuming this path is correct
+import 'package:taskaty/pages/dashboard.dart'; // Assuming this path is correct
+import 'package:taskaty/pages/user_page.dart'; // Assuming this path is correct
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'dart:ui';
+import 'dart:ui'; // For ImageFilter.blur, if you decide to re-introduce it subtly
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -24,7 +24,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   late AnimationController _slideController;
   late AnimationController _fadeController;
-  late AnimationController _floatingController;
+  late AnimationController _floatingController; // Keeping for potential future use or subtle background elements
   late Animation<Offset> _slideAnimation;
   late Animation<double> _fadeAnimation;
   late Animation<double> _floatingAnimation;
@@ -211,344 +211,226 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Get screen dimensions for responsive layout
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final double screenHeight = MediaQuery.of(context).size.height;
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        body: Container(
-          height: MediaQuery.of(context).size.height,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [
-                const Color(0xFF667eea),
-                const Color(0xFF764ba2),
-                const Color(0xFFf093fb),
-                const Color(0xFFf5576c),
-              ],
-              stops: const [0.0, 0.3, 0.7, 1.0],
-            ),
-          ),
-          child: Stack(
-            children: [
-              // Floating geometric shapes
-              _buildFloatingShape(
-                top: 100,
-                right: 50,
-                size: 80,
-                color: Colors.white.withOpacity(0.1),
-              ),
-              _buildFloatingShape(
-                top: 200,
-                left: 30,
-                size: 120,
-                color: Colors.white.withOpacity(0.05),
-              ),
-              _buildFloatingShape(
-                bottom: 150,
-                right: 40,
-                size: 100,
-                color: Colors.white.withOpacity(0.08),
-              ),
-
-              SafeArea(
-                child: Center(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                    child: FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: SlideTransition(
-                        position: _slideAnimation,
+        body: Row(
+          children: [
+            // Left half: Login form
+            Expanded(
+              flex: 1,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.all(32.0),
+                  constraints: BoxConstraints(
+                    maxWidth: screenWidth > 600 ? screenWidth * 0.4 : screenWidth * 0.8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12.0),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: SlideTransition(
+                      position: _slideAnimation,
+                      child: Form(
+                        key: _formKey,
                         child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // App Logo/Icon
+                            // App Logo/Icon - Adjusted style
                             Container(
-                              width: 100,
-                              height: 100,
+                              width: 80,
+                              height: 80,
                               decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Colors.white.withOpacity(0.3),
-                                    Colors.white.withOpacity(0.1),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(30),
+                                color: const Color(0xFF667eea), // Solid color for the icon background
+                                borderRadius: BorderRadius.circular(20),
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black.withOpacity(0.1),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 10),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 5),
                                   ),
                                 ],
                               ),
                               child: const Icon(
                                 Icons.task_alt_rounded,
-                                size: 50,
+                                size: 40,
                                 color: Colors.white,
                               ),
                             ),
                             const SizedBox(height: 32),
 
-                            // Welcome Text
+                            // Welcome Text - Adjusted style to be black and less bold
                             Text(
                               'أهلاً بك مرة أخرى',
                               style: GoogleFonts.cairo(
-                                fontSize: 32,
+                                fontSize: 28, // Slightly smaller
                                 fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                shadows: [
-                                  Shadow(
-                                    color: Colors.black.withOpacity(0.3),
-                                    offset: const Offset(0, 2),
-                                    blurRadius: 4,
-                                  ),
-                                ],
+                                color: Colors.black87, // Darker color
                               ),
+                              textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 8),
                             Text(
                               'سجل دخولك لمتابعة مهامك',
                               style: GoogleFonts.cairo(
-                                fontSize: 16,
-                                color: Colors.white.withOpacity(0.9),
+                                fontSize: 15, // Slightly smaller
+                                color: Colors.grey[700], // Grey color
                                 fontWeight: FontWeight.w500,
                               ),
+                              textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 48),
 
-                            // Login Form
-                            Container(
-                              padding: const EdgeInsets.all(32),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.2),
-                                  width: 1,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 10),
-                                  ),
-                                ],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(24),
-                                child: BackdropFilter(
-                                  filter:
-                                      ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                                  child: Form(
-                                    key: _formKey,
-                                    child: Column(
-                                      children: [
-                                        _buildModernTextField(
-                                          controller: _emailController,
-                                          label: 'البريد الإلكتروني',
-                                          icon: Icons.email_rounded,
-                                          keyboardType:
-                                              TextInputType.emailAddress,
-                                          validator: (value) {
-                                            if (value == null ||
-                                                value.isEmpty) {
-                                              return 'يرجى إدخال البريد الإلكتروني';
-                                            }
-                                            if (!RegExp(
-                                                    r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                                                .hasMatch(value)) {
-                                              return 'يرجى إدخال بريد إلكتروني صحيح';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                        const SizedBox(height: 20),
-                                        _buildModernTextField(
-                                          controller: _passwordController,
-                                          label: 'كلمة المرور',
-                                          icon: Icons.lock_rounded,
-                                          obscureText: !_isPasswordVisible,
-                                          suffixIcon: IconButton(
-                                            icon: Icon(
-                                              _isPasswordVisible
-                                                  ? Icons.visibility_off_rounded
-                                                  : Icons.visibility_rounded,
-                                              color:
-                                                  Colors.white.withOpacity(0.7),
-                                            ),
-                                            onPressed: () {
-                                              setState(() {
-                                                _isPasswordVisible =
-                                                    !_isPasswordVisible;
-                                              });
-                                            },
-                                          ),
-                                          validator: (value) {
-                                            if (value == null ||
-                                                value.isEmpty) {
-                                              return 'يرجى إدخال كلمة المرور';
-                                            }
-                                            if (value.length < 6) {
-                                              return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                        const SizedBox(height: 32),
+                            // Email Field
+                            _buildModernTextField(
+                              controller: _emailController,
+                              label: 'البريد الإلكتروني',
+                              icon: Icons.email_rounded,
+                              keyboardType: TextInputType.emailAddress,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'يرجى إدخال البريد الإلكتروني';
+                                }
+                                if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                                    .hasMatch(value)) {
+                                  return 'يرجى إدخال بريد إلكتروني صحيح';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 20),
 
-                                        // Login Button
-                                        _isLoading
-                                            ? Container(
-                                                height: 56,
-                                                decoration: BoxDecoration(
-                                                  gradient: LinearGradient(
-                                                    colors: [
-                                                      Colors.white
-                                                          .withOpacity(0.3),
-                                                      Colors.white
-                                                          .withOpacity(0.1),
-                                                    ],
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(16),
-                                                ),
-                                                child: const Center(
-                                                  child: SpinKitThreeBounce(
-                                                    color: Colors.white,
-                                                    size: 30,
-                                                  ),
-                                                ),
-                                              )
-                                            : Container(
-                                                width: double.infinity,
-                                                height: 56,
-                                                decoration: BoxDecoration(
-                                                  gradient:
-                                                      const LinearGradient(
-                                                    colors: [
-                                                      Colors.white,
-                                                      Color(0xFFF8F9FA),
-                                                    ],
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(16),
-                                                  boxShadow: [
-                                                    BoxShadow(
-                                                      color: Colors.black
-                                                          .withOpacity(0.2),
-                                                      blurRadius: 15,
-                                                      offset:
-                                                          const Offset(0, 8),
-                                                    ),
-                                                  ],
-                                                ),
-                                                child: Material(
-                                                  color: Colors.transparent,
-                                                  child: InkWell(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            16),
-                                                    onTap: _login,
-                                                    child: Center(
-                                                      child: Row(
-                                                        mainAxisAlignment:
-                                                            MainAxisAlignment
-                                                                .center,
-                                                        children: [
-                                                          const Icon(
-                                                            Icons.login_rounded,
-                                                            color: Color(
-                                                                0xFF667eea),
-                                                            size: 24,
-                                                          ),
-                                                          const SizedBox(
-                                                              width: 12),
-                                                          Text(
-                                                            'تسجيل الدخول',
-                                                            style: GoogleFonts
-                                                                .cairo(
-                                                              fontSize: 18,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .bold,
-                                                              color: const Color(
-                                                                  0xFF667eea),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                      ],
-                                    ),
-                                  ),
+                            // Password Field
+                            _buildModernTextField(
+                              controller: _passwordController,
+                              label: 'كلمة المرور',
+                              icon: Icons.lock_rounded,
+                              obscureText: !_isPasswordVisible,
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _isPasswordVisible
+                                      ? Icons.visibility_off_rounded
+                                      : Icons.visibility_rounded,
+                                  color: Colors.grey, // Matching LoginPage's icon color
                                 ),
+                                onPressed: () {
+                                  setState(() {
+                                    _isPasswordVisible = !_isPasswordVisible;
+                                  });
+                                },
                               ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'يرجى إدخال كلمة المرور';
+                                }
+                                if (value.length < 6) {
+                                  return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+                                }
+                                return null;
+                              },
                             ),
                             const SizedBox(height: 32),
 
-                            // Sign Up Link
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 16,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.2),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'ليس لديك حساب؟ ',
-                                    style: GoogleFonts.cairo(
-                                      color: Colors.white.withOpacity(0.8),
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
+                            // Login Button
+                            _isLoading
+                                ? Container(
+                                    height: 56,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF667eea), // Solid color for loading
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
-                                  ),
-                                  GestureDetector(
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        PageRouteBuilder(
-                                          pageBuilder: (context, animation,
-                                                  secondaryAnimation) =>
-                                              const SignupScreen(),
-                                          transitionsBuilder: (context,
-                                              animation,
-                                              secondaryAnimation,
-                                              child) {
-                                            return SlideTransition(
-                                              position: Tween<Offset>(
-                                                begin: const Offset(1.0, 0.0),
-                                                end: Offset.zero,
-                                              ).animate(animation),
-                                              child: child,
-                                            );
-                                          },
-                                        ),
-                                      );
-                                    },
-                                    child: Text(
-                                      'إنشاء حساب جديد',
-                                      style: GoogleFonts.cairo(
+                                    child: const Center(
+                                      child: SpinKitThreeBounce(
                                         color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        decoration: TextDecoration.underline,
-                                        decorationColor: Colors.white,
+                                        size: 30,
                                       ),
                                     ),
+                                  )
+                                : ElevatedButton(
+                                    onPressed: _login,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor:
+                                          const Color.fromARGB(255, 88, 55, 230), // Matching LoginPage's button color
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 20.0,
+                                        horizontal: 50.0,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12.0), // Matching LoginPage's border radius
+                                      ),
+                                      elevation: 5, // Added subtle elevation
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(
+                                          Icons.login_rounded,
+                                          color: Colors.white, // Icon color
+                                          size: 24,
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          'تسجيل الدخول',
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 20,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ],
+                            const SizedBox(height: 32),
+
+                            // Sign Up Link - Adjusted style for new background
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  PageRouteBuilder(
+                                    pageBuilder: (context, animation,
+                                            secondaryAnimation) =>
+                                        const SignupScreen(),
+                                    transitionsBuilder: (context,
+                                        animation,
+                                        secondaryAnimation,
+                                        child) {
+                                      return SlideTransition(
+                                        position: Tween<Offset>(
+                                          begin: const Offset(1.0, 0.0),
+                                          end: Offset.zero,
+                                        ).animate(animation),
+                                        child: child,
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                              child: Text(
+                                'ليس لديك حساب؟ إنشاء حساب جديد',
+                                style: GoogleFonts.cairo(
+                                  color: Colors.blueAccent, // A clear color against the background
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: Colors.blueAccent,
+                                ),
+                                textAlign: TextAlign.center, // Centered text
                               ),
                             ),
                           ],
@@ -558,41 +440,26 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+            // Right half: Background image
+            Expanded(
+              flex: 1,
+              child: Container(
+                height: double.infinity,
+                child: Image.asset(
+                  'assets/background_login-Photoroom.png',
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildFloatingShape({
-    double? top,
-    double? bottom,
-    double? left,
-    double? right,
-    required double size,
-    required Color color,
-  }) {
-    return AnimatedBuilder(
-      animation: _floatingAnimation,
-      builder: (context, child) {
-        return Positioned(
-          top: top != null ? top + _floatingAnimation.value : null,
-          bottom: bottom != null ? bottom + _floatingAnimation.value : null,
-          left: left,
-          right: right,
-          child: Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(size / 4),
-            ),
-          ),
-        );
-      },
-    );
-  }
+  // Removed _buildFloatingShape as it's not part of the new UI style.
+  // If you wish to re-introduce subtle background elements, you can adapt it.
 
   Widget _buildModernTextField({
     required TextEditingController controller,
@@ -603,84 +470,61 @@ class _LoginScreenState extends State<LoginScreen>
     Widget? suffixIcon,
     String? Function(String?)? validator,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.3),
-          width: 1,
+    return TextFormField(
+      controller: controller,
+      obscureText: obscureText,
+      keyboardType: keyboardType,
+      textDirection: TextDirection.rtl,
+      style: const TextStyle(color: Colors.black), // Text color black
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.black), // Label color black
+        prefixIcon: Icon(
+          icon,
+          color: Colors.grey, // Icon color grey
         ),
-      ),
-      child: TextFormField(
-        controller: controller,
-        obscureText: obscureText,
-        keyboardType: keyboardType,
-        textDirection: TextDirection.rtl,
-        style: GoogleFonts.cairo(
-          color: Colors.white,
-          fontSize: 16,
+        suffixIcon: suffixIcon,
+        filled: true, // Fill the background
+        fillColor: Colors.white, // White background for the text field
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.0), // Rounded corners
+          borderSide: const BorderSide(color: Colors.grey), // Grey border
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.0),
+          borderSide: const BorderSide(color: Colors.grey), // Grey border when enabled
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.0),
+          borderSide: const BorderSide(color: Colors.blue), // Blue border when focused
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.0),
+          borderSide: BorderSide(
+            color: Colors.red.withOpacity(0.6),
+            width: 2,
+          ),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.0),
+          borderSide: BorderSide(
+            color: Colors.red.withOpacity(0.8),
+            width: 2,
+          ),
+        ),
+        errorStyle: GoogleFonts.cairo(
+          color: Colors.red.shade700, // Darker red for error text
+          fontSize: 12,
           fontWeight: FontWeight.w500,
         ),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: GoogleFonts.cairo(
-            color: Colors.white.withOpacity(0.8),
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-          prefixIcon: Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              icon,
-              color: Colors.white,
-              size: 20,
-            ),
-          ),
-          suffixIcon: suffixIcon,
-          filled: false,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(
-              color: Colors.white.withOpacity(0.6),
-              width: 2,
-            ),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(
-              color: Colors.red.withOpacity(0.6),
-              width: 2,
-            ),
-          ),
-          focusedErrorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(
-              color: Colors.red.withOpacity(0.8),
-              width: 2,
-            ),
-          ),
-          errorStyle: GoogleFonts.cairo(
-            color: Colors.red.shade300,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 18,
-          ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16, // Adjusted padding
+          vertical: 16,
         ),
-        validator: validator,
       ),
+      validator: validator,
     );
   }
 }
+
+

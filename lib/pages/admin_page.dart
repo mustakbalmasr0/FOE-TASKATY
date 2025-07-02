@@ -362,6 +362,10 @@ class _AdminDashboardState extends State<AdminDashboard>
               icon: Icon(Icons.logout, color: colorScheme.onSurface),
               onPressed: () async {
                 await Supabase.instance.client.auth.signOut();
+                if (mounted) {
+                  Navigator.of(context)
+                      .pushNamedAndRemoveUntil('/', (route) => false);
+                }
               },
             ),
           ],
@@ -769,10 +773,11 @@ class _AdminDashboardState extends State<AdminDashboard>
             onChanged: (value) => setState(() => _selectedUserId = value),
           ),
         );
-      },
-    );
+        });
+      }
+    
   }
-}
+
 
 Widget _buildStatsSection(ColorScheme colorScheme, ThemeData theme,
     List<Map<String, dynamic>> users) {
