@@ -150,10 +150,11 @@ class PdfReportGenerator {
     return pw.Table(
       border: pw.TableBorder.all(width: 1, color: PdfColors.blue200),
       columnWidths: {
-        0: const pw.FlexColumnWidth(3),
-        1: const pw.FlexColumnWidth(2),
-        2: const pw.FlexColumnWidth(2),
-        3: const pw.FlexColumnWidth(2),
+        0: const pw.FlexColumnWidth(3), // العنوان
+        1: const pw.FlexColumnWidth(4), // الوصف (new)
+        2: const pw.FlexColumnWidth(2), // الحالة
+        3: const pw.FlexColumnWidth(2), // المنشئ
+        4: const pw.FlexColumnWidth(2), // المعين إليه
       },
       children: [
         // Header row
@@ -161,6 +162,7 @@ class PdfReportGenerator {
           decoration: const pw.BoxDecoration(color: PdfColors.blue50),
           children: [
             _buildTableCell('العنوان', isHeader: true, ttf: ttf),
+            _buildTableCell('الوصف', isHeader: true, ttf: ttf), // new column
             _buildTableCell('الحالة', isHeader: true, ttf: ttf),
             _buildTableCell('المنشئ', isHeader: true, ttf: ttf),
             _buildTableCell('المعين إليه', isHeader: true, ttf: ttf),
@@ -175,6 +177,7 @@ class PdfReportGenerator {
           final creatorName = task['creator_profile']?['name'] ?? 'غير محدد';
           final assigneeName =
               assignment?['assignee_profile']?['name'] ?? 'غير محدد';
+          final description = task['description'] ?? 'بدون وصف';
 
           return pw.TableRow(
             decoration: pw.BoxDecoration(
@@ -184,6 +187,7 @@ class PdfReportGenerator {
             ),
             children: [
               _buildTableCell(task['title'] ?? 'بدون عنوان', ttf: ttf),
+              _buildTableCell(description, ttf: ttf), // new cell
               _buildTableCell(_getStatusText(status), ttf: ttf),
               _buildTableCell(creatorName, ttf: ttf),
               _buildTableCell(assigneeName, ttf: ttf),
