@@ -42,8 +42,9 @@ class _SignupScreenState extends State<SignupScreen> {
       } else {
         // Handle mobile platforms
         final file = File(pickedFile.path);
+        final bytes = await file.readAsBytes();
         setState(() {
-          _imageBytes = file.readAsBytesSync();
+          _imageBytes = bytes;
           _imageName = path.basename(pickedFile.path);
         });
       }
