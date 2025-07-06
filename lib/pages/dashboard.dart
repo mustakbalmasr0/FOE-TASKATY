@@ -19,6 +19,9 @@ class _DashboardPageState extends State<DashboardPage> {
   bool _isLoading = false;
   String _selectedFilter = 'الكل';
 
+  // Add: Track selected task IDs
+  Set<int> _selectedTaskIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -177,20 +180,21 @@ class _DashboardPageState extends State<DashboardPage> {
 
   // Method to trigger PDF generation
   void _generatePdfReport() async {
-    if (_allTasks.isEmpty) {
+    // Use only selected tasks
+    final selectedTasks =
+        _allTasks.where((t) => _selectedTaskIds.contains(t['id'])).toList();
+    if (selectedTasks.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('لا توجد مهام لإنشاء تقرير PDF.'),
+          content: Text('يرجى تحديد المهام التي تريد تصديرها إلى PDF.'),
           backgroundColor: Colors.orange,
         ),
       );
       return;
     }
-    // Ensure plugins are initialized before using path_provider
-    // (Usually only needed in main.dart, but safe here)
     WidgetsFlutterBinding.ensureInitialized();
     final pdfGenerator = PdfReportGenerator();
-    await pdfGenerator.generateAndOpenPdf(_allTasks);
+    await pdfGenerator.generateAndOpenPdf(selectedTasks);
   }
 
   @override
@@ -218,6 +222,30 @@ class _DashboardPageState extends State<DashboardPage> {
                   icon: const Icon(Icons.picture_as_pdf),
                   onPressed: _generatePdfReport,
                   tooltip: 'تصدير تقرير PDF',
+                ),
+                // Add: Select All / Deselect All
+                IconButton(
+                  icon: Icon(
+                    _selectedTaskIds.length == _allTasks.length &&
+                            _allTasks.isNotEmpty
+                        ? Icons.check_box
+                        : Icons.check_box_outline_blank,
+                  ),
+                  tooltip: _selectedTaskIds.length == _allTasks.length &&
+                          _allTasks.isNotEmpty
+                      ? 'إلغاء تحديد الكل'
+                      : 'تحديد الكل',
+                  onPressed: () {
+                    setState(() {
+                      if (_selectedTaskIds.length == _allTasks.length &&
+                          _allTasks.isNotEmpty) {
+                        _selectedTaskIds.clear();
+                      } else {
+                        _selectedTaskIds =
+                            _allTasks.map<int>((t) => t['id'] as int).toSet();
+                      }
+                    });
+                  },
                 ),
                 IconButton(
                   icon: const Icon(Icons.refresh),
@@ -379,6 +407,9 @@ class _DashboardPageState extends State<DashboardPage> {
     final creatorProfile = task['creator_profile'];
     final status = assignment?['status'] ?? 'new';
 
+    // Add: Selection checkbox
+    final isSelected = _selectedTaskIds.contains(task['id']);
+
     return Card(
       elevation: 2,
       margin: const EdgeInsets.all(8),
@@ -398,13 +429,25 @@ class _DashboardPageState extends State<DashboardPage> {
         child: Container(
           padding: const EdgeInsets.all(16),
           child: SingleChildScrollView(
-            // <-- Wrap Column with SingleChildScrollView
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
                   children: [
+                    // Add: Checkbox for selection
+                    Checkbox(
+                      value: isSelected,
+                      onChanged: (checked) {
+                        setState(() {
+                          if (checked == true) {
+                            _selectedTaskIds.add(task['id']);
+                          } else {
+                            _selectedTaskIds.remove(task['id']);
+                          }
+                        });
+                      },
+                    ),
                     Expanded(
                       child: Text(
                         task['title'] ?? 'بدون عنوان',
