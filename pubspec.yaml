@@ -79,13 +79,26 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  fonts:
+    - family: Cairo
+      fonts:
+        - asset: assets/fonts/cairo/Cairo-SemiBold.ttf
+        - asset: assets/fonts/cairo/Cairo-Regular.ttf
+          weight: 600
+        - asset: assets/fonts/cairo/Cairo-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/cairo/Cairo-Light.ttf
+          weight: 300
+        - asset: assets/fonts/cairo/Cairo-ExtraBold.ttf
+          weight: 800
+        - asset: assets/fonts/cairo/Cairo-Medium.ttf
+          weight: 500
   assets:
     - assets/.env
     - assets/background.jpg
     - assets/background_login-Photoroom.png
     - assets/fonts/arial.ttf
     - assets/fonts/NotoSansArabic-VariableFont_wdth,wght.ttf # Ensure this is the correct path
-  
     - assets/icon.png
 flutter_icons:
   android: true
