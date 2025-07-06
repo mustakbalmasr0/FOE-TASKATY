@@ -10,18 +10,33 @@ import 'package:taskaty/pages/user_page.dart';
 import 'package:taskaty/auth/login.dart';
 
 void main() async {
+  // Ensure plugin binding is initialized before any plugin usage.
   WidgetsFlutterBinding.ensureInitialized();
+
+  // IMPORTANT:
+  // If you see MissingPluginException for path_provider or other plugins:
+  // 1. Do a FULL RESTART of your app (not just hot reload).
+  // 2. Make sure you are running on a supported platform (Android/iOS, not web).
+  // 3. If you just added a plugin, stop and re-run the app.
 
   await dotenv.load(fileName: "assets/.env");
 
+  final supabaseUrl = dotenv.env['SUPABASE_URL'];
+  final supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
+
+  if (supabaseUrl == null || supabaseApiKey == null) {
+    throw Exception(
+        'SUPABASE_URL or SUPABASE_API_KEY is missing in assets/.env');
+  }
+
   await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL']!,
-    anonKey: dotenv.env['SUPABASE_API_KEY']!,
+    url: supabaseUrl,
+    anonKey: supabaseApiKey,
     authOptions: const FlutterAuthClientOptions(
       authFlowType: AuthFlowType.pkce,
     ),
   );
-  runApp(const MyApp());
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {

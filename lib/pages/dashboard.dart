@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:taskaty/pages/admin_page.dart';
+import 'package:taskaty/pages/pdf_report_generator.dart';
 import 'package:taskaty/pages/task_details_page.dart';
+import 'package:taskaty/pages/pdf_report_generator.dart'; // Import the new class
 
 class DashboardPage extends StatefulWidget {
   static const route = '/admin/dashboard';
@@ -174,6 +175,24 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  // Method to trigger PDF generation
+  void _generatePdfReport() async {
+    if (_allTasks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا توجد مهام لإنشاء تقرير PDF.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    // Ensure plugins are initialized before using path_provider
+    // (Usually only needed in main.dart, but safe here)
+    WidgetsFlutterBinding.ensureInitialized();
+    final pdfGenerator = PdfReportGenerator();
+    await pdfGenerator.generateAndOpenPdf(_allTasks);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -194,6 +213,12 @@ class _DashboardPageState extends State<DashboardPage> {
             appBar: AppBar(
               title: const Text('لوحة المتابعة'),
               actions: [
+                // PDF Export Button
+                IconButton(
+                  icon: const Icon(Icons.picture_as_pdf),
+                  onPressed: _generatePdfReport,
+                  tooltip: 'تصدير تقرير PDF',
+                ),
                 IconButton(
                   icon: const Icon(Icons.refresh),
                   onPressed: _fetchAllTasks,
@@ -634,7 +659,7 @@ class _DashboardPageState extends State<DashboardPage> {
       );
     }
 
-    // Fixed: Use _name' instead of 'name' to match the database schema
+    // Fixed: Use 'name' from the profile object
     final name = user['name']?.toString() ?? 'غير معروف';
     final avatarUrl = user['avatar_url']?.toString();
 
