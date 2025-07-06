@@ -24,7 +24,8 @@ class _LoginScreenState extends State<LoginScreen>
 
   late AnimationController _slideController;
   late AnimationController _fadeController;
-  late AnimationController _floatingController; // Keeping for potential future use or subtle background elements
+  late AnimationController
+      _floatingController; // Keeping for potential future use or subtle background elements
   late Animation<Offset> _slideAnimation;
   late Animation<double> _fadeAnimation;
   late Animation<double> _floatingAnimation;
@@ -87,7 +88,7 @@ class _LoginScreenState extends State<LoginScreen>
       final supabase = Supabase.instance.client;
       final Session? session = supabase.auth.currentSession;
 
-      if (session != null) {
+      if (session != null && session.user != null) {
         final response = await supabase
             .from('profiles')
             .select('role')
@@ -215,251 +216,551 @@ class _LoginScreenState extends State<LoginScreen>
     final double screenWidth = MediaQuery.of(context).size.width;
     final double screenHeight = MediaQuery.of(context).size.height;
 
+    // Define a breakpoint for mobile vs. desktop layout
+    const double mobileBreakpoint = 600.0;
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        body: Row(
-          children: [
-            // Left half: Login form
-            Expanded(
-              flex: 1,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.all(32.0),
-                  constraints: BoxConstraints(
-                    maxWidth: screenWidth > 600 ? screenWidth * 0.4 : screenWidth * 0.8,
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < mobileBreakpoint) {
+              // Mobile layout: Stack with background image and scrollable form
+              return Stack(
+                children: [
+                  // Background Image
+                  Positioned.fill(
+                    child: Image.asset(
+                      'assets/background_login-Photoroom.png',
+                      fit: BoxFit.cover,
+                    ),
                   ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12.0),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
+                  // Overlay for subtle blur or darkening (optional)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.black.withOpacity(0.3), // Subtle overlay
+                    ),
+                  ),
+                  // Login Form (scrollable)
+                  SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints
+                            .maxHeight, // Ensure it takes full height
                       ),
-                    ],
-                  ),
-                  child: FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: SlideTransition(
-                      position: _slideAnimation,
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // App Logo/Icon - Adjusted style
-                            Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF667eea), // Solid color for the icon background
-                                borderRadius: BorderRadius.circular(20),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 5),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.task_alt_rounded,
-                                size: 40,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 32),
-
-                            // Welcome Text - Adjusted style to be black and less bold
-                            Text(
-                              'أهلاً بك مرة أخرى',
-                              style: GoogleFonts.cairo(
-                                fontSize: 28, // Slightly smaller
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87, // Darker color
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'سجل دخولك لمتابعة مهامك',
-                              style: GoogleFonts.cairo(
-                                fontSize: 15, // Slightly smaller
-                                color: Colors.grey[700], // Grey color
-                                fontWeight: FontWeight.w500,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 48),
-
-                            // Email Field
-                            _buildModernTextField(
-                              controller: _emailController,
-                              label: 'البريد الإلكتروني',
-                              icon: Icons.email_rounded,
-                              keyboardType: TextInputType.emailAddress,
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'يرجى إدخال البريد الإلكتروني';
-                                }
-                                if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                                    .hasMatch(value)) {
-                                  return 'يرجى إدخال بريد إلكتروني صحيح';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 20),
-
-                            // Password Field
-                            _buildModernTextField(
-                              controller: _passwordController,
-                              label: 'كلمة المرور',
-                              icon: Icons.lock_rounded,
-                              obscureText: !_isPasswordVisible,
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _isPasswordVisible
-                                      ? Icons.visibility_off_rounded
-                                      : Icons.visibility_rounded,
-                                  color: Colors.grey, // Matching LoginPage's icon color
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24.0, vertical: 48.0),
+                          child: Container(
+                            width:
+                                screenWidth * 0.9, // Take more width on mobile
+                            padding: const EdgeInsets.all(
+                                24.0), // Slightly less padding for mobile
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(
+                                  0.95), // Slightly transparent white
+                              borderRadius: BorderRadius.circular(
+                                  16.0), // More rounded corners
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.15),
+                                  blurRadius: 15,
+                                  offset: const Offset(0, 8),
                                 ),
-                                onPressed: () {
-                                  setState(() {
-                                    _isPasswordVisible = !_isPasswordVisible;
-                                  });
-                                },
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'يرجى إدخال كلمة المرور';
-                                }
-                                if (value.length < 6) {
-                                  return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
-                                }
-                                return null;
-                              },
+                              ],
                             ),
-                            const SizedBox(height: 32),
-
-                            // Login Button
-                            _isLoading
-                                ? Container(
-                                    height: 56,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF667eea), // Solid color for loading
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Center(
-                                      child: SpinKitThreeBounce(
-                                        color: Colors.white,
-                                        size: 30,
-                                      ),
-                                    ),
-                                  )
-                                : ElevatedButton(
-                                    onPressed: _login,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor:
-                                          const Color.fromARGB(255, 88, 55, 230), // Matching LoginPage's button color
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 20.0,
-                                        horizontal: 50.0,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12.0), // Matching LoginPage's border radius
-                                      ),
-                                      elevation: 5, // Added subtle elevation
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        const Icon(
-                                          Icons.login_rounded,
-                                          color: Colors.white, // Icon color
-                                          size: 24,
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Text(
-                                          'تسجيل الدخول',
-                                          style: GoogleFonts.cairo(
-                                            fontSize: 20,
+                            child: FadeTransition(
+                              opacity: _fadeAnimation,
+                              child: SlideTransition(
+                                position: _slideAnimation,
+                                child: Form(
+                                  key: _formKey,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      // App Logo/Icon
+                                      Align(
+                                        alignment: Alignment.center,
+                                        child: Container(
+                                          width: 70, // Slightly smaller icon
+                                          height: 70,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF667eea),
+                                            borderRadius:
+                                                BorderRadius.circular(18),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black
+                                                    .withOpacity(0.1),
+                                                blurRadius: 8,
+                                                offset: const Offset(0, 4),
+                                              ),
+                                            ],
+                                          ),
+                                          child: const Icon(
+                                            Icons.task_alt_rounded,
+                                            size: 36, // Slightly smaller icon
                                             color: Colors.white,
-                                            fontWeight: FontWeight.bold,
                                           ),
                                         ),
-                                      ],
-                                    ),
-                                  ),
-                            const SizedBox(height: 32),
+                                      ),
+                                      const SizedBox(
+                                          height: 24), // Reduced spacing
 
-                            // Sign Up Link - Adjusted style for new background
-                            GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  PageRouteBuilder(
-                                    pageBuilder: (context, animation,
-                                            secondaryAnimation) =>
-                                        const SignupScreen(),
-                                    transitionsBuilder: (context,
-                                        animation,
-                                        secondaryAnimation,
-                                        child) {
-                                      return SlideTransition(
-                                        position: Tween<Offset>(
-                                          begin: const Offset(1.0, 0.0),
-                                          end: Offset.zero,
-                                        ).animate(animation),
-                                        child: child,
-                                      );
-                                    },
+                                      // Welcome Text
+                                      Text(
+                                        'أهلاً بك مرة أخرى',
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 26, // Adjusted font size
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black87,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      const SizedBox(
+                                          height: 6), // Reduced spacing
+                                      Text(
+                                        'سجل دخولك لمتابعة مهامك',
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 14, // Adjusted font size
+                                          color: Colors.grey[700],
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      const SizedBox(
+                                          height: 36), // Reduced spacing
+
+                                      // Email Field
+                                      _buildModernTextField(
+                                        controller: _emailController,
+                                        label: 'البريد الإلكتروني',
+                                        icon: Icons.email_rounded,
+                                        keyboardType:
+                                            TextInputType.emailAddress,
+                                        validator: (value) {
+                                          if (value == null || value.isEmpty) {
+                                            return 'يرجى إدخال البريد الإلكتروني';
+                                          }
+                                          if (!RegExp(
+                                                  r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                                              .hasMatch(value)) {
+                                            return 'يرجى إدخال بريد إلكتروني صحيح';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(
+                                          height: 16), // Reduced spacing
+
+                                      // Password Field
+                                      _buildModernTextField(
+                                        controller: _passwordController,
+                                        label: 'كلمة المرور',
+                                        icon: Icons.lock_rounded,
+                                        obscureText: !_isPasswordVisible,
+                                        suffixIcon: IconButton(
+                                          icon: Icon(
+                                            _isPasswordVisible
+                                                ? Icons.visibility_off_rounded
+                                                : Icons.visibility_rounded,
+                                            color: Colors.grey,
+                                          ),
+                                          onPressed: () {
+                                            setState(() {
+                                              _isPasswordVisible =
+                                                  !_isPasswordVisible;
+                                            });
+                                          },
+                                        ),
+                                        validator: (value) {
+                                          if (value == null || value.isEmpty) {
+                                            return 'يرجى إدخال كلمة المرور';
+                                          }
+                                          if (value.length < 6) {
+                                            return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(
+                                          height: 24), // Reduced spacing
+
+                                      // Login Button
+                                      _isLoading
+                                          ? Container(
+                                              height:
+                                                  50, // Slightly smaller height
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF667eea),
+                                                borderRadius: BorderRadius.circular(
+                                                    10), // Slightly less rounded
+                                              ),
+                                              child: const Center(
+                                                child: SpinKitThreeBounce(
+                                                  color: Colors.white,
+                                                  size:
+                                                      25, // Slightly smaller spinner
+                                                ),
+                                              ),
+                                            )
+                                          : ElevatedButton(
+                                              onPressed: _login,
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor:
+                                                    const Color.fromARGB(
+                                                        255, 88, 55, 230),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  vertical:
+                                                      16.0, // Adjusted padding
+                                                  horizontal: 40.0,
+                                                ),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          10.0),
+                                                ),
+                                                elevation:
+                                                    4, // Slightly less elevation
+                                              ),
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  const Icon(
+                                                    Icons.login_rounded,
+                                                    color: Colors.white,
+                                                    size:
+                                                        22, // Slightly smaller icon
+                                                  ),
+                                                  const SizedBox(
+                                                      width:
+                                                          10), // Reduced spacing
+                                                  Text(
+                                                    'تسجيل الدخول',
+                                                    style: GoogleFonts.cairo(
+                                                      fontSize:
+                                                          18, // Adjusted font size
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                      const SizedBox(
+                                          height: 24), // Reduced spacing
+
+                                      // Sign Up Link
+                                      GestureDetector(
+                                        onTap: () {
+                                          Navigator.push(
+                                            context,
+                                            PageRouteBuilder(
+                                              pageBuilder: (context, animation,
+                                                      secondaryAnimation) =>
+                                                  const SignupScreen(),
+                                              transitionsBuilder: (context,
+                                                  animation,
+                                                  secondaryAnimation,
+                                                  child) {
+                                                return SlideTransition(
+                                                  position: Tween<Offset>(
+                                                    begin:
+                                                        const Offset(1.0, 0.0),
+                                                    end: Offset.zero,
+                                                  ).animate(animation),
+                                                  child: child,
+                                                );
+                                              },
+                                            ),
+                                          );
+                                        },
+                                        child: Text(
+                                          'ليس لديك حساب؟ إنشاء حساب جديد',
+                                          style: GoogleFonts.cairo(
+                                            color: Colors.blueAccent,
+                                            fontSize: 13, // Adjusted font size
+                                            fontWeight: FontWeight.bold,
+                                            decoration:
+                                                TextDecoration.underline,
+                                            decorationColor: Colors.blueAccent,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                );
-                              },
-                              child: Text(
-                                'ليس لديك حساب؟ إنشاء حساب جديد',
-                                style: GoogleFonts.cairo(
-                                  color: Colors.blueAccent, // A clear color against the background
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  decoration: TextDecoration.underline,
-                                  decorationColor: Colors.blueAccent,
                                 ),
-                                textAlign: TextAlign.center, // Centered text
                               ),
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
-            ),
-            // Right half: Background image
-            Expanded(
-              flex: 1,
-              child: Container(
-                height: double.infinity,
-                child: Image.asset(
-                  'assets/background_login-Photoroom.png',
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-          ],
+                ],
+              );
+            } else {
+              // Desktop layout: Row with form on left and image on right
+              return Row(
+                children: [
+                  // Left half: Login form
+                  Expanded(
+                    flex: 1,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(32.0),
+                        constraints: BoxConstraints(
+                          maxWidth: screenWidth * 0.4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12.0),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: FadeTransition(
+                          opacity: _fadeAnimation,
+                          child: SlideTransition(
+                            position: _slideAnimation,
+                            child: Form(
+                              key: _formKey,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  // App Logo/Icon
+                                  Align(
+                                    alignment: Alignment.center,
+                                    child: Container(
+                                      width: 80,
+                                      height: 80,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF667eea),
+                                        borderRadius: BorderRadius.circular(20),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color:
+                                                Colors.black.withOpacity(0.1),
+                                            blurRadius: 10,
+                                            offset: const Offset(0, 5),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.task_alt_rounded,
+                                        size: 40,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 32),
+
+                                  // Welcome Text
+                                  Text(
+                                    'أهلاً بك مرة أخرى',
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black87,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'سجل دخولك لمتابعة مهامك',
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 15,
+                                      color: Colors.grey[700],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 48),
+
+                                  // Email Field
+                                  _buildModernTextField(
+                                    controller: _emailController,
+                                    label: 'البريد الإلكتروني',
+                                    icon: Icons.email_rounded,
+                                    keyboardType: TextInputType.emailAddress,
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'يرجى إدخال البريد الإلكتروني';
+                                      }
+                                      if (!RegExp(
+                                              r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                                          .hasMatch(value)) {
+                                        return 'يرجى إدخال بريد إلكتروني صحيح';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 20),
+
+                                  // Password Field
+                                  _buildModernTextField(
+                                    controller: _passwordController,
+                                    label: 'كلمة المرور',
+                                    icon: Icons.lock_rounded,
+                                    obscureText: !_isPasswordVisible,
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        _isPasswordVisible
+                                            ? Icons.visibility_off_rounded
+                                            : Icons.visibility_rounded,
+                                        color: Colors.grey,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _isPasswordVisible =
+                                              !_isPasswordVisible;
+                                        });
+                                      },
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'يرجى إدخال كلمة المرور';
+                                      }
+                                      if (value.length < 6) {
+                                        return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 32),
+
+                                  // Login Button
+                                  _isLoading
+                                      ? Container(
+                                          height: 56,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF667eea),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                          child: const Center(
+                                            child: SpinKitThreeBounce(
+                                              color: Colors.white,
+                                              size: 30,
+                                            ),
+                                          ),
+                                        )
+                                      : ElevatedButton(
+                                          onPressed: _login,
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor:
+                                                const Color.fromARGB(
+                                                    255, 88, 55, 230),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 20.0,
+                                              horizontal: 50.0,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(12.0),
+                                            ),
+                                            elevation: 5,
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              const Icon(
+                                                Icons.login_rounded,
+                                                color: Colors.white,
+                                                size: 24,
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Text(
+                                                'تسجيل الدخول',
+                                                style: GoogleFonts.cairo(
+                                                  fontSize: 20,
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                  const SizedBox(height: 32),
+
+                                  // Sign Up Link
+                                  GestureDetector(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        PageRouteBuilder(
+                                          pageBuilder: (context, animation,
+                                                  secondaryAnimation) =>
+                                              const SignupScreen(),
+                                          transitionsBuilder: (context,
+                                              animation,
+                                              secondaryAnimation,
+                                              child) {
+                                            return SlideTransition(
+                                              position: Tween<Offset>(
+                                                begin: const Offset(1.0, 0.0),
+                                                end: Offset.zero,
+                                              ).animate(animation),
+                                              child: child,
+                                            );
+                                          },
+                                        ),
+                                      );
+                                    },
+                                    child: Text(
+                                      'ليس لديك حساب؟ إنشاء حساب جديد',
+                                      style: GoogleFonts.cairo(
+                                        color: Colors.blueAccent,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        decoration: TextDecoration.underline,
+                                        decorationColor: Colors.blueAccent,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Right half: Background image
+                  Expanded(
+                    flex: 1,
+                    child: Container(
+                      height: double.infinity,
+                      child: Image.asset(
+                        'assets/background_login-Photoroom.png',
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+          },
         ),
       ),
     );
   }
-
-  // Removed _buildFloatingShape as it's not part of the new UI style.
-  // If you wish to re-introduce subtle background elements, you can adapt it.
 
   Widget _buildModernTextField({
     required TextEditingController controller,
@@ -475,28 +776,28 @@ class _LoginScreenState extends State<LoginScreen>
       obscureText: obscureText,
       keyboardType: keyboardType,
       textDirection: TextDirection.rtl,
-      style: const TextStyle(color: Colors.black), // Text color black
+      style: const TextStyle(color: Colors.black),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.black), // Label color black
+        labelStyle: const TextStyle(color: Colors.black),
         prefixIcon: Icon(
           icon,
-          color: Colors.grey, // Icon color grey
+          color: Colors.grey,
         ),
         suffixIcon: suffixIcon,
-        filled: true, // Fill the background
-        fillColor: Colors.white, // White background for the text field
+        filled: true,
+        fillColor: Colors.white,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.0), // Rounded corners
-          borderSide: const BorderSide(color: Colors.grey), // Grey border
+          borderRadius: BorderRadius.circular(8.0),
+          borderSide: const BorderSide(color: Colors.grey),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8.0),
-          borderSide: const BorderSide(color: Colors.grey), // Grey border when enabled
+          borderSide: const BorderSide(color: Colors.grey),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8.0),
-          borderSide: const BorderSide(color: Colors.blue), // Blue border when focused
+          borderSide: const BorderSide(color: Colors.blue),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8.0),
@@ -513,12 +814,12 @@ class _LoginScreenState extends State<LoginScreen>
           ),
         ),
         errorStyle: GoogleFonts.cairo(
-          color: Colors.red.shade700, // Darker red for error text
+          color: Colors.red.shade700,
           fontSize: 12,
           fontWeight: FontWeight.w500,
         ),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16, // Adjusted padding
+          horizontal: 16,
           vertical: 16,
         ),
       ),
@@ -526,5 +827,3 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 }
-
-

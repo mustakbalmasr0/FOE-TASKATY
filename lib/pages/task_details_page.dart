@@ -1166,7 +1166,8 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                   shape: BoxShape.circle,
                 ),
                 padding: const EdgeInsets.all(6),
-                child: Icon(icon, color: color, size: 24), // Slightly smaller icon
+                child:
+                    Icon(icon, color: color, size: 24), // Slightly smaller icon
               ),
               const SizedBox(width: 14),
               Flexible(
