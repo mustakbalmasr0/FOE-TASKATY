@@ -8,15 +8,22 @@ import 'package:printing/printing.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io' as io;
 import 'package:universal_html/html.dart' as html;
-import 'package:flutter/services.dart' show rootBundle; // Add for font loading
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:google_fonts/google_fonts.dart';
 
 class PdfReportGenerator {
   Future<void> generateAndOpenPdf(List<Map<String, dynamic>> tasks) async {
     try {
       // Load Cairo font for Arabic support
-      final fontData =
-          await rootBundle.load('assets/fonts/cairo/Cairo-Regular.ttf');
-      final ttf = pw.Font.ttf(fontData);
+      pw.Font ttf;
+      if (kIsWeb) {
+        // Use GoogleFonts Cairo for web
+        ttf = await PdfGoogleFonts.cairoRegular();
+      } else {
+        final fontData =
+            await rootBundle.load('assets/fonts/cairo/Cairo-Regular.ttf');
+        ttf = pw.Font.ttf(fontData);
+      }
 
       // Create PDF document
       final pdf = pw.Document();
