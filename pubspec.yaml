@@ -97,7 +97,7 @@ flutter:
     - assets/.env
     - assets/background.jpg
     - assets/background_login-Photoroom.png
-    - assets/fonts/arial.ttf
+    
     - assets/fonts/NotoSansArabic-VariableFont_wdth,wght.ttf # Ensure this is the correct path
     - assets/icon.png
 flutter_icons:
