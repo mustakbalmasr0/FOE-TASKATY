@@ -55,7 +55,8 @@ dependencies:
   jhijri: ^1.0.0
   flutter_localization: ^0.3.1
   universal_html: ^2.2.4
-  printing: ^5.14.2  
+  printing: ^5.14.2
+  table_calendar: ^3.0.9  
 
 dev_dependencies:
   flutter_test:
@@ -95,11 +96,11 @@ flutter:
           weight: 500
   assets:
     - assets/.env
-    - assets/background.jpg
-    - assets/background_login-Photoroom.png
-    
+    - assets/background.png
+    - assets/background_login.png
     - assets/fonts/NotoSansArabic-VariableFont_wdth,wght.ttf # Ensure this is the correct path
     - assets/icon.png
+    - assets/pdf_logo.svg
 flutter_icons:
   android: true
   ios: true

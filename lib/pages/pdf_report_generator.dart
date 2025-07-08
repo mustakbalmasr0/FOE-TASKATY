@@ -28,22 +28,57 @@ class PdfReportGenerator {
         ttfBold = pw.Font.ttf(fontDataBold);
       }
 
+      // Load SVG background image
+      final String svgString = await rootBundle.loadString('assets/pdf_logo.svg');
+
       // Create PDF document
       final pdf = pw.Document();
 
       // Add content to PDF
       pdf.addPage(
         pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
-          textDirection: pw.TextDirection.rtl,
-          theme: pw.ThemeData.withFont(
-            base: ttf,
-            bold: ttfBold,
-            italic: ttf,
-            boldItalic: ttfBold,
-          ),
           header: (pw.Context context) => _buildHeader(ttf, ttfBold),
           footer: (pw.Context context) => _buildFooter(ttf, context),
+          pageTheme: pw.PageTheme(
+            pageFormat: PdfPageFormat.a4,
+            textDirection: pw.TextDirection.rtl,
+            theme: pw.ThemeData.withFont(
+              base: ttf,
+              bold: ttfBold,
+              italic: ttf,
+              boldItalic: ttfBold,
+            ),
+            buildBackground: (pw.Context context) {
+              return pw.FullPage(
+                ignoreMargins: true,
+                child: pw.Center(
+                  child: pw.Container(
+                    width: 200, // Smaller width
+                    height: 200, // Smaller height
+                    child: pw.Opacity(
+                      opacity: 0.25, // Reduced opacity for blur effect
+                      child: pw.Container(
+                        decoration: pw.BoxDecoration(
+                          borderRadius: pw.BorderRadius.circular(20),
+                          boxShadow: [
+                            pw.BoxShadow(
+                              color: PdfColors.grey300,
+                              blurRadius: 15,
+                              spreadRadius: 5,
+                            ),
+                          ],
+                        ),
+                        child: pw.SvgImage(
+                          svg: svgString,
+                          fit: pw.BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
           build: (pw.Context context) {
             return [
               pw.SizedBox(height: 20),
@@ -79,7 +114,7 @@ class PdfReportGenerator {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                'تقرير إدارة المهام',
+                'أجندة العمل اليومية ',
                 style: pw.TextStyle(
                   fontSize: 24,
                   fontWeight: pw.FontWeight.bold,
@@ -112,7 +147,7 @@ class PdfReportGenerator {
               borderRadius: pw.BorderRadius.circular(8),
             ),
             child: pw.Text(
-              _formatDate(DateTime.now()),
+              _formatDateWithDayName(DateTime.now()),
               style: pw.TextStyle(
                 fontSize: 14,
                 color: PdfColors.white,
@@ -140,14 +175,7 @@ class PdfReportGenerator {
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(
-            'تم إنشاء التقرير بواسطة نظام إدارة المهام',
-            style: pw.TextStyle(
-              fontSize: 10,
-              color: const PdfColor.fromInt(0xFF64748b),
-              font: ttf,
-            ),
-          ),
+          
           pw.Text(
             'صفحة ${context.pageNumber} من ${context.pagesCount}',
             style: pw.TextStyle(
@@ -313,11 +341,11 @@ class PdfReportGenerator {
                   ),
                 ),
                 children: [
-                  _buildTableCell('العنوان', isHeader: true, ttf: ttf, ttfBold: ttfBold),
-                  _buildTableCell('الوصف', isHeader: true, ttf: ttf, ttfBold: ttfBold),
+                  //_buildTableCell('العنوان', isHeader: true, ttf: ttf, ttfBold: ttfBold),
+                  _buildTableCell('المهام', isHeader: true, ttf: ttf, ttfBold: ttfBold),
                   _buildTableCell('الحالة', isHeader: true, ttf: ttf, ttfBold: ttfBold),
                   _buildTableCell('المنشئ', isHeader: true, ttf: ttf, ttfBold: ttfBold),
-                  _buildTableCell('المعين إليه', isHeader: true, ttf: ttf, ttfBold: ttfBold),
+                  _buildTableCell('المختص', isHeader: true, ttf: ttf, ttfBold: ttfBold),
                 ],
               ),
               // Data rows
@@ -399,7 +427,7 @@ class PdfReportGenerator {
     switch (status) {
       case 'completed':
         return {
-          'text': 'مكتملة',
+          'text': 'تم التنفيذ',
           'color': const PdfColor.fromInt(0xFF10b981),
         };
       case 'in_progress':
@@ -421,6 +449,21 @@ class PdfReportGenerator {
       'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
     ];
     return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+
+  String _formatDateWithDayName(DateTime date) {
+    final months = [
+      'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+    ];
+    
+    final dayNames = [
+      'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 
+      'الجمعة', 'السبت', 'الأحد'
+    ];
+    
+    final dayName = dayNames[date.weekday - 1];
+    return '$dayName، ${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
   Future<void> _downloadPdfWeb(Uint8List pdfBytes) async {
