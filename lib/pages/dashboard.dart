@@ -3,7 +3,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:taskaty/pages/admin_page.dart';
 import 'package:taskaty/pages/pdf_report_generator.dart';
 import 'package:taskaty/pages/task_details_page.dart';
-import 'package:taskaty/pages/pdf_report_generator.dart'; // Import the new class
+import 'package:taskaty/pages/modern_task_card.dart';
+import 'package:table_calendar/table_calendar.dart'; // Keep this import for isSameDay
+import 'package:taskaty/pages/task_calendar.dart'; // Import your new calendar widget
+import 'package:collection/collection.dart'; // **ADD THIS IMPORT**
 
 class DashboardPage extends StatefulWidget {
   static const route = '/admin/dashboard';
@@ -13,66 +16,131 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage> {
+class _DashboardPageState extends State<DashboardPage>
+    with TickerProviderStateMixin {
   List<Map<String, dynamic>> _allTasks = [];
   Map<String, Map<String, dynamic>> _usersCache = {};
   bool _isLoading = false;
   String _selectedFilter = 'الكل';
 
-  // Add: Track selected task IDs
+  // Calendar related variables
+  DateTime _focusedDay = DateTime.now();
+  DateTime? _selectedDay;
+  CalendarFormat _calendarFormat = CalendarFormat.month;
+
+  late AnimationController _calendarAnimationController;
+  late Animation<double> _calendarAnimation;
+
+  // Task selection
   Set<int> _selectedTaskIds = {};
+
+  List<Map<String, dynamic>> _filteredTasks = [];
 
   @override
   void initState() {
     super.initState();
     _fetchAllTasks();
+
+    _calendarAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _calendarAnimation = CurvedAnimation(
+      parent: _calendarAnimationController,
+      curve: Curves.easeInOut,
+    );
+    _calendarAnimationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _calendarAnimationController.dispose();
+    super.dispose();
+  }
+
+  void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
+    setState(() {
+      if (isSameDay(_selectedDay, selectedDay)) {
+        // If the same day is selected again, deselect it
+        _selectedDay = null;
+        _filteredTasks = _allTasks; // Show all tasks
+      } else {
+        _selectedDay = selectedDay;
+        _focusedDay = focusedDay;
+        _filterTasksByDate(selectedDay);
+      }
+    });
+  }
+
+  void _filterTasksByDate(DateTime selectedDate) {
+    final startOfDay =
+        DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+    setState(() {
+      _filteredTasks = _allTasks.where((task) {
+        // Ensure 'created_at' is not null before parsing
+        if (task['created_at'] == null) return false;
+        final createdAt = DateTime.parse(task['created_at']);
+        return createdAt.isAfter(startOfDay) && createdAt.isBefore(endOfDay);
+      }).toList();
+    });
+  }
+
+  List<Map<String, dynamic>> _getTasksForDay(DateTime day) {
+    final startOfDay = DateTime(day.year, day.month, day.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+    return _allTasks.where((task) {
+      // Ensure 'created_at' is not null before parsing
+      if (task['created_at'] == null) return false;
+      final createdAt = DateTime.parse(task['created_at']);
+      return createdAt.isAfter(startOfDay) && createdAt.isBefore(endOfDay);
+    }).toList();
   }
 
   Future<void> _fetchAllTasks() async {
     setState(() => _isLoading = true);
     try {
-      // Step 1: Fetch all tasks
       final tasksResponse = await Supabase.instance.client
           .from('tasks')
           .select('*')
           .order('created_at', ascending: false);
 
+      // Supabase select can return List<Map<String, dynamic>> or null if no rows,
+      // but type 'List<dynamic>' (which comes from .from and .select in some Supabase versions)
+      // needs to be handled carefully.
+      // Explicitly check for null and then cast.
       if (tasksResponse == null) {
         setState(() {
           _allTasks = [];
+          _filteredTasks = [];
           _isLoading = false;
         });
         return;
       }
 
+      // Ensure tasks is correctly typed
       final tasks = List<Map<String, dynamic>>.from(tasksResponse);
 
-      // Step 2: Fetch all task assignments
       final assignmentsResponse =
           await Supabase.instance.client.from('task_assignments').select('*');
 
+      // Ensure assignments is correctly typed
       final assignments = assignmentsResponse != null
           ? List<Map<String, dynamic>>.from(assignmentsResponse)
           : <Map<String, dynamic>>[];
 
-      // Step 3: Collect all unique user IDs
       Set<String> userIds = {};
-
-      // Add creator IDs from tasks
       for (final task in tasks) {
         if (task['created_by'] != null) {
           userIds.add(task['created_by'].toString());
         }
       }
-
-      // Add assignee IDs from assignments
       for (final assignment in assignments) {
         if (assignment['user_id'] != null) {
           userIds.add(assignment['user_id'].toString());
         }
       }
 
-      // Step 4: Fetch all user profiles - Fixed column name from 'name' to 'full_name'
       _usersCache.clear();
       if (userIds.isNotEmpty) {
         final usersResponse = await Supabase.instance.client
@@ -88,15 +156,11 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // Step 5: Match assignments to tasks and enrich with user data
       final enrichedTasks = tasks.map((task) {
         final taskId = task['id'];
-
-        // Find assignments for this task
         final taskAssignments = assignments
             .where((assignment) => assignment['task_id'] == taskId)
             .map((assignment) {
-          // Add user profile to assignment
           if (assignment['user_id'] != null) {
             assignment['assignee_profile'] =
                 _usersCache[assignment['user_id'].toString()];
@@ -104,22 +168,23 @@ class _DashboardPageState extends State<DashboardPage> {
           return assignment;
         }).toList();
 
-        // Add assignments to task
         task['task_assignments'] = taskAssignments;
-
-        // Add creator profile to task
         if (task['created_by'] != null) {
           task['creator_profile'] = _usersCache[task['created_by'].toString()];
         }
-
         return task;
       }).toList();
 
       if (mounted) {
         setState(() {
           _allTasks = enrichedTasks;
-          debugPrint('Fetched Tasks with Users: ${_allTasks.length} tasks');
-          debugPrint('Users Cache: ${_usersCache.keys.toList()}');
+          // Apply initial filter if a day is selected when refetching
+          if (_selectedDay != null) {
+            _filterTasksByDate(_selectedDay!);
+          } else {
+            _filteredTasks = enrichedTasks;
+          }
+          debugPrint('Fetched Tasks: ${_allTasks.length}');
         });
       }
     } catch (e) {
@@ -127,7 +192,7 @@ class _DashboardPageState extends State<DashboardPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('خطأ في جلب المهام: ${e.toString()}'),
+            content: Text('خطأ في جلب المهام: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -141,7 +206,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> _updateTaskStatus(int taskId, String status) async {
     try {
-      // Find the assignment for this task
       final assignmentResponse = await Supabase.instance.client
           .from('task_assignments')
           .select()
@@ -149,13 +213,12 @@ class _DashboardPageState extends State<DashboardPage> {
           .single();
 
       if (assignmentResponse != null) {
-        // Update the assignment status
         await Supabase.instance.client
             .from('task_assignments')
             .update({'status': status}).eq('id', assignmentResponse['id']);
 
         if (mounted) {
-          _fetchAllTasks(); // Refresh tasks after update
+          _fetchAllTasks();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content:
@@ -170,7 +233,7 @@ class _DashboardPageState extends State<DashboardPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('خطأ في تحديث حالة المهمة: ${e.toString()}'),
+            content: Text('خطأ في تحديث حالة المهمة: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -178,11 +241,11 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  // Method to trigger PDF generation
   void _generatePdfReport() async {
-    // Use only selected tasks
-    final selectedTasks =
-        _allTasks.where((t) => _selectedTaskIds.contains(t['id'])).toList();
+    final selectedTasks = (_selectedDay != null ? _filteredTasks : _allTasks)
+        .where((t) => _selectedTaskIds.contains(t['id']))
+        .toList();
+
     if (selectedTasks.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -192,15 +255,79 @@ class _DashboardPageState extends State<DashboardPage> {
       );
       return;
     }
-    WidgetsFlutterBinding.ensureInitialized();
+
+    // `WidgetsFlutterBinding.ensureInitialized()` is typically called once at the very start of main()
+    // and is not needed here.
     final pdfGenerator = PdfReportGenerator();
     await pdfGenerator.generateAndOpenPdf(selectedTasks);
+  }
+
+  // New method to show the calendar as a bottom sheet
+  void _showCalendarBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true, // Allows the bottom sheet to be full height
+      builder: (BuildContext context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.8, // Start with 80% of the screen height
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false, // Set to false to allow initialChildSize to work
+          builder: (_, scrollController) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(
+                      'اختر تاريخًا',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      child: TaskCalendar(
+                        focusedDay: _focusedDay,
+                        selectedDay: _selectedDay,
+                        calendarFormat: _calendarFormat,
+                        onDaySelected: (day, focusedDay) {
+                          _onDaySelected(day, focusedDay);
+                          Navigator.pop(
+                              context); // Close bottom sheet after selection
+                        },
+                        onFormatChanged: (format) {
+                          setState(() {
+                            _calendarFormat = format;
+                          });
+                        },
+                        onPageChanged: (focusedDay) {
+                          _focusedDay = focusedDay;
+                        },
+                        eventLoader: _getTasksForDay,
+                        animation: _calendarAnimation,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final displayTasks = _selectedDay != null ? _filteredTasks : _allTasks;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -208,7 +335,7 @@ class _DashboardPageState extends State<DashboardPage> {
         children: [
           Positioned.fill(
             child: Image.asset(
-              'assets/background.jpg',
+              'assets/background.png',
               fit: BoxFit.cover,
             ),
           ),
@@ -217,32 +344,48 @@ class _DashboardPageState extends State<DashboardPage> {
             appBar: AppBar(
               title: const Text('لوحة المتابعة'),
               actions: [
-                // PDF Export Button
+                // Calendar Icon Button
+                IconButton(
+                  icon: const Icon(Icons.calendar_today),
+                  onPressed: _showCalendarBottomSheet, // Call the new method
+                  tooltip: 'اختيار تاريخ',
+                ),
+                // New "Show All Tasks" Button
+                IconButton(
+                  icon: const Icon(Icons.view_list),
+                  onPressed: () {
+                    setState(() {
+                      _selectedDay = null; // Clear the selected day
+                      _filteredTasks =
+                          _allTasks; // Show all tasks from the main list
+                    });
+                  },
+                  tooltip: 'عرض جميع المهام',
+                ),
                 IconButton(
                   icon: const Icon(Icons.picture_as_pdf),
                   onPressed: _generatePdfReport,
                   tooltip: 'تصدير تقرير PDF',
                 ),
-                // Add: Select All / Deselect All
                 IconButton(
                   icon: Icon(
-                    _selectedTaskIds.length == _allTasks.length &&
-                            _allTasks.isNotEmpty
+                    _selectedTaskIds.length == displayTasks.length &&
+                            displayTasks.isNotEmpty
                         ? Icons.check_box
                         : Icons.check_box_outline_blank,
                   ),
-                  tooltip: _selectedTaskIds.length == _allTasks.length &&
-                          _allTasks.isNotEmpty
+                  tooltip: _selectedTaskIds.length == displayTasks.length &&
+                          displayTasks.isNotEmpty
                       ? 'إلغاء تحديد الكل'
                       : 'تحديد الكل',
                   onPressed: () {
                     setState(() {
-                      if (_selectedTaskIds.length == _allTasks.length &&
-                          _allTasks.isNotEmpty) {
+                      if (_selectedTaskIds.length == displayTasks.length &&
+                          displayTasks.isNotEmpty) {
                         _selectedTaskIds.clear();
                       } else {
                         _selectedTaskIds =
-                            _allTasks.map<int>((t) => t['id'] as int).toSet();
+                            displayTasks.map((t) => t['id'] as int).toSet();
                       }
                     });
                   },
@@ -266,7 +409,6 @@ class _DashboardPageState extends State<DashboardPage> {
             floatingActionButton: FloatingActionButton.extended(
               onPressed: () {
                 Navigator.of(context).pushNamed(AdminDashboard.route).then((_) {
-                  // Refresh tasks when returning from create task page
                   _fetchAllTasks();
                 });
               },
@@ -275,322 +417,256 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             body: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _allTasks.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.assignment_outlined,
-                              size: 64,
-                              color: colorScheme.primary.withOpacity(0.5),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'لا توجد مهام حالياً',
-                              style: theme.textTheme.titleLarge,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'قم بإنشاء مهمة جديدة باستخدام زر إنشاء مهمة',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.textTheme.bodySmall?.color,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : CustomScrollView(
-                        slivers: [
-                          SliverToBoxAdapter(
-                            child: _buildStatsCard(colorScheme, theme),
-                          ),
-                          SliverPadding(
-                            padding: const EdgeInsets.all(16),
-                            sliver: SliverGrid(
-                              gridDelegate:
-                                  const SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: 400,
-                                mainAxisSpacing: 16,
-                                crossAxisSpacing: 16,
-                                mainAxisExtent: 200,
-                              ),
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  if (index >= _allTasks.length) return null;
-                                  return _buildTaskCard(
-                                      _allTasks[index], colorScheme, theme);
-                                },
-                                childCount: _allTasks.length,
-                              ),
-                            ),
-                          ),
-                        ],
+                : CustomScrollView(
+                    // Changed to CustomScrollView for overall scrolling
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: _buildStatsCard(colorScheme, theme, displayTasks),
                       ),
+                      // The TaskCalendar widget is now opened via a button, so it's removed from here
+                      if (displayTasks.isEmpty)
+                        SliverToBoxAdapter(
+                          child: Center(
+                            child: Container(
+                              margin: const EdgeInsets.all(32),
+                              padding: const EdgeInsets.all(32),
+                              decoration: BoxDecoration(
+                                color: colorScheme.surface.withOpacity(0.8),
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 5),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    _selectedDay != null
+                                        ? Icons.event_busy
+                                        : Icons.assignment_outlined,
+                                    size: 64,
+                                    color: colorScheme.primary.withOpacity(0.5),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    _selectedDay != null
+                                        ? 'لا توجد مهام في هذا اليوم'
+                                        : 'لا توجد مهام حالياً',
+                                    style: theme.textTheme.titleLarge,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _selectedDay != null
+                                        ? 'جرب اختيار يوم آخر من التقويم'
+                                        : 'قم بإنشاء مهمة جديدة باستخدام زر إنشاء مهمة',
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: theme.textTheme.bodySmall?.color,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.all(16),
+                          sliver: SliverGrid(
+                            gridDelegate:
+                                const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 400,
+                              mainAxisSpacing: 16,
+                              crossAxisSpacing: 16,
+                              mainAxisExtent: 280,
+                            ),
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                if (index >= displayTasks.length) return null;
+                                final task = displayTasks[index];
+                                final isSelected =
+                                    _selectedTaskIds.contains(task['id']);
+                                return ModernTaskCard(
+                                  task: task,
+                                  isSelected: isSelected,
+                                  onSelectionChanged: (checked) {
+                                    setState(() {
+                                      if (checked == true) {
+                                        _selectedTaskIds.add(task['id']);
+                                      } else {
+                                        _selectedTaskIds.remove(task['id']);
+                                      }
+                                    });
+                                  },
+                                  onTap: () {
+                                    final assignments =
+                                        task['task_assignments'];
+                                    Map<String, dynamic>? assignment;
+
+                                    if (assignments is List &&
+                                        assignments.isNotEmpty) {
+                                      // Explicitly cast to List<Map<String, dynamic>> for firstWhereOrNull
+                                      final List<Map<String, dynamic>>
+                                          typedAssignments =
+                                          List<Map<String, dynamic>>.from(
+                                              assignments);
+
+                                      // Use firstWhereOrNull to find an 'in_progress' assignment
+                                      assignment =
+                                          typedAssignments.firstWhereOrNull(
+                                              (a) => a['status'] == 'in_progress');
+
+                                      // If no 'in_progress' assignment was found, use the first one
+                                      if (assignment == null) {
+                                        assignment = typedAssignments
+                                            .firstOrNull; // Use firstOrNull for safety
+                                      }
+                                    }
+
+                                    // Now, pass `assignment` (which can be null) to the details page
+                                    Navigator.of(context)
+                                        .push(
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                TaskDetailsPage(
+                                              task: task,
+                                              assignment:
+                                                  assignment, // This is now correctly typed as Map<String, dynamic>?
+                                            ),
+                                          ),
+                                        )
+                                        .then((_) {
+                                      _fetchAllTasks();
+                                    });
+                                  },
+                                  colorScheme: colorScheme,
+                                  theme: theme,
+                                );
+                              },
+                              childCount: displayTasks.length,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStatsCard(ColorScheme colorScheme, ThemeData theme) {
-    // Update stats calculation to use task_assignments
-    final completedTasks = _allTasks.where((task) {
-      final assignments = task['task_assignments'] as List<dynamic>?;
-      return assignments?.any((a) => a['status'] == 'completed') ?? false;
-    }).length;
-
-    final inProgressTasks = _allTasks.where((task) {
-      final assignments = task['task_assignments'] as List<dynamic>?;
-      return assignments?.any((a) => a['status'] == 'in_progress') ?? false;
-    }).length;
-
-    return Card(
-      margin: const EdgeInsets.all(16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildStatItem(
-              'إجمالي المهام',
-              _allTasks.length.toString(),
-              Icons.assignment,
-              colorScheme.primary,
-              theme,
-            ),
-            _buildStatItem(
-              'قيد التنفيذ',
-              inProgressTasks.toString(),
-              Icons.pending_actions,
-              colorScheme.secondary,
-              theme,
-            ),
-            _buildStatItem(
-              'مكتملة',
-              completedTasks.toString(),
-              Icons.task_alt,
-              Colors.green,
-              theme,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatItem(
-      String label, String value, IconData icon, Color color, ThemeData theme) {
+  Widget _buildStatItem(String label, String value, IconData icon, Color color,
+      ThemeData theme) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: color, size: 24),
-        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: color, size: 28),
+        ),
+        const SizedBox(height: 12),
         Text(
           value,
-          style: theme.textTheme.headlineSmall,
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
         ),
+        const SizedBox(height: 4),
         Text(
           label,
-          style: theme.textTheme.bodySmall,
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildTaskCard(
-      Map<String, dynamic> task, ColorScheme colorScheme, ThemeData theme) {
-    final assignments = task['task_assignments'] as List<dynamic>?;
-    final assignment =
-        assignments?.isNotEmpty == true ? assignments?.elementAt(0) : null;
-    final assigneeProfile = assignment?['assignee_profile'];
-    final creatorProfile = task['creator_profile'];
-    final status = assignment?['status'] ?? 'new';
+  Widget _buildStatsCard(
+      ColorScheme colorScheme, ThemeData theme, List<Map<String, dynamic>> tasks) {
+    final completedTasks = tasks.where((task) {
+      final assignments = task['task_assignments'] as List<dynamic>?;
+      return assignments?.any((a) => (a as Map<String, dynamic>)['status'] == 'completed') ??
+          false;
+    }).length;
 
-    // Add: Selection checkbox
-    final isSelected = _selectedTaskIds.contains(task['id']);
+    final inProgressTasks = tasks.where((task) {
+      final assignments = task['task_assignments'] as List<dynamic>?;
+      return assignments?.any((a) => (a as Map<String, dynamic>)['status'] == 'in_progress') ??
+          false;
+    }).length;
 
     return Card(
-      elevation: 2,
-      margin: const EdgeInsets.all(8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => TaskDetailsPage(
-                task: task,
-                assignment: assignment,
-              ),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    // Add: Checkbox for selection
-                    Checkbox(
-                      value: isSelected,
-                      onChanged: (checked) {
-                        setState(() {
-                          if (checked == true) {
-                            _selectedTaskIds.add(task['id']);
-                          } else {
-                            _selectedTaskIds.remove(task['id']);
-                          }
-                        });
-                      },
-                    ),
-                    Expanded(
-                      child: Text(
-                        task['title'] ?? 'بدون عنوان',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    _buildStatusChip(status, colorScheme),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                if (task['description'] != null) ...[
-                  Text(
-                    task['description'],
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurface.withOpacity(0.8),
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                const SizedBox(height: 8),
-                const Divider(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: _buildUserInfo(
-                        'منشئ',
-                        creatorProfile,
-                        colorScheme,
-                        theme,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildUserInfo(
-                        'معين إلى',
-                        assigneeProfile,
-                        colorScheme,
-                        theme,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+      margin: const EdgeInsets.all(16),
+      elevation: 8,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              colorScheme.surface,
+              colorScheme.surface.withOpacity(0.8),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
+          borderRadius: BorderRadius.circular(20),
         ),
-      ),
-    );
-  }
-
-  void _showTaskDetails(
-      Map<String, dynamic> task, Map<String, dynamic>? assignment) {
-    final currentStatus = assignment?['status'] ?? 'new';
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: Container(
-          padding: EdgeInsets.only(
-            top: 24,
-            left: 24,
-            right: 24,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-          ),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Task Info Section
-              Text(
-                task['title'] ?? 'بدون عنوان',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              // Show date if a day is selected (now that calendar is always visible)
+              if (_selectedDay != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'مهام يوم ${_formatDate(_selectedDay.toString())}',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: colorScheme.primary,
                       fontWeight: FontWeight.bold,
                     ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                task['description'] ?? '',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 16),
-
-              // Status Update Section
-              Text(
-                'تحديث الحالة',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
+                  ),
+                ),
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  for (final status in ['new', 'in_progress', 'completed'])
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: ChoiceChip(
-                        label: Text(_getStatusText(status)),
-                        selected: currentStatus == status,
-                        onSelected: (_) {
-                          Navigator.pop(context);
-                          _updateTaskStatus(task['id'], status);
-                        },
-                        labelStyle: TextStyle(
-                          color: currentStatus == status
-                              ? Theme.of(context)
-                                  .colorScheme
-                                  .onSecondaryContainer
-                              : Theme.of(context).colorScheme.onSurface,
-                        ),
-                        selectedColor: _getStatusColor(status).withOpacity(0.2),
-                      ),
-                    ),
+                  _buildStatItem(
+                    'إجمالي المهام',
+                    tasks.length.toString(),
+                    Icons.assignment,
+                    colorScheme.primary,
+                    theme,
+                  ),
+                  _buildStatItem(
+                    'قيد التنفيذ',
+                    inProgressTasks.toString(),
+                    Icons.pending_actions,
+                    colorScheme.secondary,
+                    theme,
+                  ),
+                  _buildStatItem(
+                    'مكتملة',
+                    completedTasks.toString(),
+                    Icons.task_alt,
+                    Colors.green,
+                    theme,
+                  ),
                 ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildUserInfo('منشئ', task['creator_profile'],
-                      Theme.of(context).colorScheme, Theme.of(context)),
-                  _buildUserInfo(
-                      'معين إلى',
-                      task['task_assignments']?[0]?['assignee_profile'],
-                      Theme.of(context).colorScheme,
-                      Theme.of(context)),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'تاريخ الإنشاء: ${_formatDate(task['created_at'])}',
-                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
           ),
@@ -631,41 +707,6 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  Widget _buildStatusChip(String? status, ColorScheme colorScheme) {
-    Color color;
-    String label;
-
-    switch (status) {
-      case 'completed':
-        color = Colors.green;
-        label = 'مكتملة';
-        break;
-      case 'in_progress':
-        color = colorScheme.primary;
-        label = 'قيد التنفيذ';
-        break;
-      default:
-        color = Colors.grey;
-        label = 'جديدة';
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.bold,
-          fontSize: 12,
-        ),
-      ),
-    );
-  }
-
   Widget _buildUserInfo(String label, Map<String, dynamic>? user,
       ColorScheme colorScheme, ThemeData theme) {
     if (user == null) {
@@ -702,7 +743,6 @@ class _DashboardPageState extends State<DashboardPage> {
       );
     }
 
-    // Fixed: Use 'name' from the profile object
     final name = user['name']?.toString() ?? 'غير معروف';
     final avatarUrl = user['avatar_url']?.toString();
 
