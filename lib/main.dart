@@ -13,11 +13,7 @@ void main() async {
   // Ensure plugin binding is initialized before any plugin usage.
   WidgetsFlutterBinding.ensureInitialized();
 
-  // IMPORTANT:
-  // If you see MissingPluginException for path_provider or other plugins:
-  // 1. Do a FULL RESTART of your app (not just hot reload).
-  // 2. Make sure you are running on a supported platform (Android/iOS, not web).
-  // 3. If you just added a plugin, stop and re-run the app.
+  
 
   await dotenv.load(fileName: "assets/.env");
 

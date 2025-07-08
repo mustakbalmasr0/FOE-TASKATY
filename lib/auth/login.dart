@@ -231,7 +231,7 @@ class _LoginScreenState extends State<LoginScreen>
                   // Background Image
                   Positioned.fill(
                     child: Image.asset(
-                      'assets/background_login-Photoroom.png',
+                      'assets/background_login.png',
                       fit: BoxFit.cover,
                     ),
                   ),
@@ -748,7 +748,7 @@ class _LoginScreenState extends State<LoginScreen>
                     child: Container(
                       height: double.infinity,
                       child: Image.asset(
-                        'assets/background_login-Photoroom.png',
+                        'assets/background_login.png',
                         fit: BoxFit.cover,
                       ),
                     ),
