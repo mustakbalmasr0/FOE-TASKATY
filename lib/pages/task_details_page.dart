@@ -306,7 +306,7 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                   children: [
                     // Use the image as the background for the title section
                     Image.asset(
-                      'assets/background.jpg',
+                      'assets/background.png',
                       fit: BoxFit.cover,
                     ),
                     // Removed gradient overlay Container, only image is shown

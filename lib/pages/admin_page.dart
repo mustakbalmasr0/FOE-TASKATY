@@ -28,7 +28,7 @@ class _AdminDashboardState extends State<AdminDashboard>
   DateTime? _startDate;
   DateTime? _endDate;
   String _selectedPriority = 'عادي';
-  final List<String> _priorities = ['عادي', 'هام', 'عاجل'];
+  final List<String> _priorities = ['هام للغاية', 'هام جدا ', 'هام'];
   String _selectedStatus = 'new';
   final List<String> _statuses = ['new', 'in_progress', 'completed'];
 
@@ -243,7 +243,7 @@ class _AdminDashboardState extends State<AdminDashboard>
   String _getStatusText(String status) {
     switch (status) {
       case 'completed':
-        return 'مكتملة';
+        return 'تم التنفيذ';
       case 'in_progress':
         return 'قيد التنفيذ';
       default:
