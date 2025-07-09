@@ -1,31 +1,74 @@
-import 'dart:async';
+// lib/main.dart
 
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:taskaty/router/auth_router.dart';
 import 'package:taskaty/pages/dashboard.dart';
 import 'package:taskaty/pages/admin_page.dart';
 import 'package:taskaty/pages/user_page.dart';
 import 'package:taskaty/auth/login.dart';
 
+// Conditional imports for Firebase (only on mobile)
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:taskaty/services/notification_service.dart';
+
 void main() async {
-  // Ensure plugin binding is initialized before any plugin usage.
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase
-  await Firebase.initializeApp();
-
+  // Load environment variables
   await dotenv.load(fileName: "assets/.env");
 
+  // Initialize Firebase only on mobile platforms
+  if (!kIsWeb) {
+    try {
+      await Firebase.initializeApp();
+      
+      // Set up background message handler
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+      
+      // Initialize notification service
+      await NotificationService.initialize();
+      
+      // Setup token refresh listener
+      NotificationService.setupTokenRefreshListener();
+      
+      // Get and save initial FCM token
+      await NotificationService.getAndSaveFCMToken();
+      
+      // Handle initial message when app is opened from terminated state
+      final RemoteMessage? initialMessage = await NotificationService.getInitialMessage();
+      if (initialMessage != null) {
+        print('App opened from notification: ${initialMessage.messageId}');
+      }
+    } catch (e) {
+      print('Firebase initialization failed: $e');
+    }
+  }
+
+  // Initialize Supabase
+  await _initializeSupabase();
+
+  runApp(MyApp());
+}
+
+// Background message handler (only used on mobile)
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  if (!kIsWeb) {
+    await Firebase.initializeApp();
+    print('Handling a background message: ${message.messageId}');
+  }
+}
+
+Future<void> _initializeSupabase() async {
   final supabaseUrl = dotenv.env['SUPABASE_URL'];
   final supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
 
   if (supabaseUrl == null || supabaseApiKey == null) {
-    throw Exception(
-        'SUPABASE_URL or SUPABASE_API_KEY is missing in assets/.env');
+    throw Exception('SUPABASE_URL or SUPABASE_API_KEY is missing in assets/.env');
   }
 
   await Supabase.initialize(
@@ -35,85 +78,6 @@ void main() async {
       authFlowType: AuthFlowType.pkce,
     ),
   );
-
-  // Initialize FCM
-  await _initializeFCM();
-
-  runApp(MyApp());
-}
-
-Future<void> _initializeFCM() async {
-  FirebaseMessaging messaging = FirebaseMessaging.instance;
-  
-  // Request permission for notifications
-  NotificationSettings settings = await messaging.requestPermission(
-    alert: true,
-    announcement: false,
-    badge: true,
-    carPlay: false,
-    criticalAlert: false,
-    provisional: false,
-    sound: true,
-  );
-
-  if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-    print('User granted permission');
-  } else if (settings.authorizationStatus == AuthorizationStatus.provisional) {
-    print('User granted provisional permission');
-  } else {
-    print('User declined or has not accepted permission');
-  }
-
-  // Get FCM token
-  String? token = await messaging.getToken();
-  print('FCM Token: $token');
-  
-  // Save token to Supabase if user is authenticated
-  final currentUser = Supabase.instance.client.auth.currentUser;
-  if (currentUser != null && token != null) {
-    await _saveFCMToken(token, currentUser.id);
-  }
-
-  // Handle token refresh
-  messaging.onTokenRefresh.listen((newToken) async {
-    print('FCM Token refreshed: $newToken');
-    final currentUser = Supabase.instance.client.auth.currentUser;
-    if (currentUser != null) {
-      await _saveFCMToken(newToken, currentUser.id);
-    }
-  });
-
-  // Handle foreground messages
-  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    print('Got a message whilst in the foreground!');
-    print('Message data: ${message.data}');
-
-    if (message.notification != null) {
-      print('Message also contained a notification: ${message.notification}');
-    }
-  });
-
-  // Handle background messages
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-}
-
-Future<void> _saveFCMToken(String token, String userId) async {
-  try {
-    await Supabase.instance.client.from('user_tokens').upsert({
-      'user_id': userId,
-      'fcm_token': token,
-      'updated_at': DateTime.now().toIso8601String(),
-    });
-    print('FCM token saved to Supabase');
-  } catch (e) {
-    print('Error saving FCM token: $e');
-  }
-}
-
-// Top-level function to handle background messages
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-  print("Handling a background message: ${message.messageId}");
 }
 
 class MyApp extends StatelessWidget {
@@ -139,7 +103,7 @@ class MyApp extends StatelessWidget {
           child: child!,
         );
       },
-      home: const LoginScreen(),
+      home: const AuthStateScreen(),
       routes: {
         '/login': (context) => const LoginScreen(),
         '/auth': (context) => const AuthRouter(),
@@ -171,69 +135,76 @@ class _AuthStateScreenState extends State<AuthStateScreen> {
   }
 
   Future<void> _initializeAuth() async {
-    final session = Supabase.instance.client.auth.currentSession;
-
-    if (mounted) {
-      setState(() {
-        _user = session?.user;
-        _isInitialized = true;
-      });
-    }
-
-    _authStateSubscription =
-        Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-      final AuthChangeEvent event = data.event;
-      final Session? session = data.session;
+    try {
+      final session = Supabase.instance.client.auth.currentSession;
 
       if (mounted) {
         setState(() {
           _user = session?.user;
+          _isInitialized = true;
         });
       }
 
-      if (event == AuthChangeEvent.signedIn) {
-        _handleSignedIn(session?.user);
-      } else if (event == AuthChangeEvent.signedOut) {
-        _navigateToAuth();
+      _authStateSubscription =
+          Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+        final AuthChangeEvent event = data.event;
+        final Session? session = data.session;
+
+        if (mounted) {
+          setState(() {
+            _user = session?.user;
+          });
+        }
+
+        if (event == AuthChangeEvent.signedIn) {
+          _handleSignedIn(session?.user);
+        } else if (event == AuthChangeEvent.signedOut) {
+          _handleSignedOut();
+        }
+      });
+    } catch (e) {
+      print('Auth initialization error: $e');
+      if (mounted) {
+        setState(() {
+          _isInitialized = true;
+        });
       }
-    });
+    }
   }
 
-  void _handleSignedIn(User? user) async {
-    if (!mounted) return;
-    
-    // Save FCM token when user signs in
-    if (user != null) {
-      await _saveUserFCMToken(user.id);
+  Future<void> _handleSignedIn(User? user) async {
+    if (!mounted || user == null) return;
+
+    // Get and save FCM token when user signs in (only on mobile)
+    if (!kIsWeb) {
+      try {
+        await NotificationService.getAndSaveFCMToken(user.id);
+      } catch (e) {
+        print('FCM token save failed: $e');
+      }
     }
-    
-    if (user?.userMetadata?['role'] == 'admin') {
+
+    // Navigate based on user role
+    if (user.userMetadata?['role'] == 'admin') {
       Navigator.of(context).pushReplacementNamed('/admin/dashboard');
     } else {
       Navigator.of(context).pushReplacementNamed('/user/dashboard');
     }
   }
 
-  Future<void> _saveUserFCMToken(String userId) async {
-    try {
-      FirebaseMessaging messaging = FirebaseMessaging.instance;
-      String? token = await messaging.getToken();
-      
-      if (token != null) {
-        await Supabase.instance.client.from('user_tokens').upsert({
-          'user_id': userId,
-          'fcm_token': token,
-          'updated_at': DateTime.now().toIso8601String(),
-        });
+  Future<void> _handleSignedOut() async {
+    // Delete FCM token on logout (only on mobile)
+    if (!kIsWeb) {
+      try {
+        await NotificationService.deleteFCMToken();
+      } catch (e) {
+        print('FCM token deletion failed: $e');
       }
-    } catch (e) {
-      print('Error saving FCM token on sign in: $e');
     }
-  }
 
-  void _navigateToAuth() {
-    if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed('/auth');
+    if (mounted) {
+      Navigator.of(context).pushReplacementNamed('/auth');
+    }
   }
 
   @override

@@ -290,6 +290,9 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    // Get all assigned users
+    final assignments = widget.task['task_assignments'] as List<dynamic>?;
+
     return Scaffold(
       body: Form(
         key: _formKey,
@@ -590,12 +593,107 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                               ),
                               child: Padding(
                                 padding: const EdgeInsets.all(8.0),
-                                child: _buildInfoCard(
-                                  context,
-                                  'معين إلى',
-                                  widget.assignment?['assignee_profile'],
-                                  Icons.assignment_ind_outlined,
-                                  colorScheme.secondary,
+                                // --- Show all assigned users vertically here ---
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.assignment_ind_outlined,
+                                            color: colorScheme.secondary,
+                                            size: 28),
+                                        const SizedBox(width: 12),
+                                        Text(
+                                          'معين إلى',
+                                          style: theme.textTheme.titleMedium
+                                              ?.copyWith(
+                                                  fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    assignments != null &&
+                                            assignments.isNotEmpty
+                                        ? Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: List.generate(
+                                                assignments.length, (idx) {
+                                              final assignee = assignments[idx]
+                                                  ['assignee_profile'];
+                                              final name = assignee?['name']
+                                                      ?.toString() ??
+                                                  'غير محدد';
+                                              final avatarUrl =
+                                                  assignee?['avatar_url']
+                                                      ?.toString();
+                                              return Padding(
+                                                padding: const EdgeInsets.only(
+                                                    bottom: 12.0),
+                                                child: Row(
+                                                  children: [
+                                                    CircleAvatar(
+                                                      radius: 20,
+                                                      backgroundColor:
+                                                          colorScheme.secondary
+                                                              .withOpacity(
+                                                                  0.15),
+                                                      backgroundImage:
+                                                          avatarUrl != null &&
+                                                                  avatarUrl
+                                                                      .isNotEmpty
+                                                              ? NetworkImage(
+                                                                  avatarUrl)
+                                                              : null,
+                                                      child: avatarUrl ==
+                                                                  null ||
+                                                              avatarUrl.isEmpty
+                                                          ? Text(
+                                                              name.isNotEmpty
+                                                                  ? name[0]
+                                                                      .toUpperCase()
+                                                                  : '?',
+                                                              style: theme
+                                                                  .textTheme
+                                                                  .titleLarge
+                                                                  ?.copyWith(
+                                                                color: colorScheme
+                                                                    .secondary,
+                                                              ),
+                                                            )
+                                                          : null,
+                                                    ),
+                                                    const SizedBox(width: 12),
+                                                    Expanded(
+                                                      child: Text(
+                                                        name,
+                                                        style: theme
+                                                            .textTheme.bodyLarge
+                                                            ?.copyWith(
+                                                          color: colorScheme
+                                                              .onSurface,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            }),
+                                          )
+                                        : Text(
+                                            'غير محدد',
+                                            style: theme.textTheme.bodyLarge
+                                                ?.copyWith(
+                                              color: theme
+                                                  .textTheme.bodySmall?.color,
+                                            ),
+                                          ),
+                                  ],
                                 ),
                               ),
                             ),
@@ -1021,6 +1119,7 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                     backgroundImage: user['avatar_url'] != null
                         ? NetworkImage(user['avatar_url'])
                         : null,
+                    // Move 'child' to the end
                     child: user['avatar_url'] == null
                         ? Text(
                             user['name']?[0].toUpperCase() ?? '?',
