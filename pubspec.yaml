@@ -102,7 +102,7 @@ flutter:
     - assets/background_login.png
     - assets/fonts/NotoSansArabic-VariableFont_wdth,wght.ttf # Ensure this is the correct path
     - assets/icon.png
-    - assets/pdf_logo.svg
+    - assets/pdf_logo.png
 flutter_icons:
   android: true
   ios: true
