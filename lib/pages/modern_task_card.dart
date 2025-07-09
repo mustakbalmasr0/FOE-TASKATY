@@ -103,13 +103,15 @@ class ModernTaskCard extends StatelessWidget {
                                 Text(
                                   _formatDate(task['created_at']),
                                   style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.onSurface.withOpacity(0.6),
+                                    color:
+                                        colorScheme.onSurface.withOpacity(0.6),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          _buildModernStatusChip(status, statusColor, statusText),
+                          _buildModernStatusChip(
+                              status, statusColor, statusText),
                         ],
                       ),
 
@@ -143,7 +145,8 @@ class ModernTaskCard extends StatelessWidget {
                           color: colorScheme.primaryContainer.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: colorScheme.primaryContainer.withOpacity(0.3),
+                            color:
+                                colorScheme.primaryContainer.withOpacity(0.3),
                           ),
                         ),
                         child: Row(
@@ -172,7 +175,8 @@ class ModernTaskCard extends StatelessWidget {
                                       const SizedBox(width: 4),
                                       Text(
                                         'معين إلى',
-                                        style: theme.textTheme.bodySmall?.copyWith(
+                                        style:
+                                            theme.textTheme.bodySmall?.copyWith(
                                           color: colorScheme.primary,
                                           fontWeight: FontWeight.w600,
                                         ),
@@ -180,57 +184,169 @@ class ModernTaskCard extends StatelessWidget {
                                     ],
                                   ),
                                   const SizedBox(height: 6),
-                                  assignments != null && assignments.isNotEmpty
-                                      ? Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: List.generate(assignments.length, (idx) {
-                                            final assignee = assignments[idx]['assignee_profile'];
-                                            final name = assignee?['name']?.toString() ?? 'غير محدد';
-                                            final avatarUrl = assignee?['avatar_url']?.toString();
-                                            return Padding(
-                                              padding: const EdgeInsets.only(bottom: 8.0),
-                                              child: Row(
-                                                children: [
-                                                  CircleAvatar(
-                                                    radius: 16,
-                                                    backgroundColor: colorScheme.primaryContainer.withOpacity(0.7),
-                                                    backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
-                                                        ? NetworkImage(avatarUrl)
-                                                        : null,
-                                                    child: avatarUrl == null || avatarUrl.isEmpty
-                                                        ? Text(
-                                                            name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                                            style: TextStyle(
-                                                              color: colorScheme.onPrimaryContainer,
-                                                              fontWeight: FontWeight.bold,
-                                                              fontSize: 12,
-                                                            ),
-                                                          )
-                                                        : null,
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Expanded(
-                                                    child: Text(
-                                                      name,
-                                                      style: theme.textTheme.bodySmall?.copyWith(
-                                                        fontWeight: FontWeight.w500,
-                                                        color: colorScheme.onSurface,
+                                  if (assignments != null &&
+                                      assignments.isNotEmpty)
+                                    assignments.length > 1
+                                        ? SizedBox(
+                                            height:
+                                                56, // Adjust as needed for max visible users
+                                            child: ListView.builder(
+                                              itemCount: assignments.length,
+                                              itemBuilder: (context, idx) {
+                                                final assignee =
+                                                    assignments[idx]
+                                                        ['assignee_profile'];
+                                                final name = assignee?['name']
+                                                        ?.toString() ??
+                                                    'غير محدد';
+                                                final avatarUrl =
+                                                    assignee?['avatar_url']
+                                                        ?.toString();
+                                                return Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          bottom: 8.0),
+                                                  child: Row(
+                                                    children: [
+                                                      CircleAvatar(
+                                                        radius: 16,
+                                                        backgroundColor:
+                                                            colorScheme
+                                                                .primaryContainer
+                                                                .withOpacity(
+                                                                    0.7),
+                                                        backgroundImage:
+                                                            avatarUrl != null &&
+                                                                    avatarUrl
+                                                                        .isNotEmpty
+                                                                ? NetworkImage(
+                                                                    avatarUrl)
+                                                                : null,
+                                                        child: avatarUrl ==
+                                                                    null ||
+                                                                avatarUrl
+                                                                    .isEmpty
+                                                            ? Text(
+                                                                name.isNotEmpty
+                                                                    ? name[0]
+                                                                        .toUpperCase()
+                                                                    : '?',
+                                                                style:
+                                                                    TextStyle(
+                                                                  color: colorScheme
+                                                                      .onPrimaryContainer,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                  fontSize: 12,
+                                                                ),
+                                                              )
+                                                            : null,
                                                       ),
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                    ),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                        child: Text(
+                                                          name,
+                                                          style: theme.textTheme
+                                                              .bodySmall
+                                                              ?.copyWith(
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                            color: colorScheme
+                                                                .onSurface,
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
-                                                ],
+                                                );
+                                              },
+                                            ),
+                                          )
+                                        : Row(
+                                            children: [
+                                              CircleAvatar(
+                                                radius: 16,
+                                                backgroundColor: colorScheme
+                                                    .primaryContainer
+                                                    .withOpacity(0.7),
+                                                backgroundImage: assignments[0][
+                                                                    'assignee_profile']
+                                                                ?[
+                                                                'avatar_url'] !=
+                                                            null &&
+                                                        assignments[0][
+                                                                    'assignee_profile']
+                                                                ?['avatar_url']
+                                                            .isNotEmpty
+                                                    ? NetworkImage(assignments[
+                                                                0]
+                                                            ['assignee_profile']
+                                                        ['avatar_url'])
+                                                    : null,
+                                                child: assignments[0][
+                                                                    'assignee_profile']
+                                                                ?[
+                                                                'avatar_url'] ==
+                                                            null ||
+                                                        assignments[0][
+                                                                    'assignee_profile']
+                                                                ?['avatar_url']
+                                                            .isEmpty
+                                                    ? Text(
+                                                        (assignments[0]['assignee_profile']
+                                                                        ?[
+                                                                        'name']
+                                                                    ?.isNotEmpty ??
+                                                                false)
+                                                            ? assignments[0][
+                                                                        'assignee_profile']
+                                                                    ['name'][0]
+                                                                .toUpperCase()
+                                                            : '?',
+                                                        style: TextStyle(
+                                                          color: colorScheme
+                                                              .onPrimaryContainer,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: 12,
+                                                        ),
+                                                      )
+                                                    : null,
                                               ),
-                                            );
-                                          }),
-                                        )
-                                      : Text(
-                                          'غير محدد',
-                                          style: theme.textTheme.bodySmall?.copyWith(
-                                            color: colorScheme.onSurface.withOpacity(0.7),
-                                          ),
-                                        ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  assignments[0]['assignee_profile']
+                                                              ?['name']
+                                                          ?.toString() ??
+                                                      'غير محدد',
+                                                  style: theme
+                                                      .textTheme.bodySmall
+                                                      ?.copyWith(
+                                                    fontWeight: FontWeight.w500,
+                                                    color:
+                                                        colorScheme.onSurface,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          )
+                                  else
+                                    Text(
+                                      'غير محدد',
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
+                                        color: colorScheme.onSurface
+                                            .withOpacity(0.7),
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),
@@ -316,7 +432,8 @@ class ModernTaskCard extends StatelessWidget {
     );
   }
 
-  Widget _buildModernUserInfo(String label, Map<String, dynamic>? user, IconData icon) {
+  Widget _buildModernUserInfo(
+      String label, Map<String, dynamic>? user, IconData icon) {
     final name = user?['name']?.toString() ?? 'غير محدد';
     final avatarUrl = user?['avatar_url']?.toString();
 
