@@ -653,14 +653,14 @@ class _DashboardPageState extends State<DashboardPage>
                     theme,
                   ),
                   _buildStatItem(
-                    'قيد التنفيذ',
+                    'جاري التنفيذ',
                     inProgressTasks.toString(),
                     Icons.pending_actions,
                     colorScheme.secondary,
                     theme,
                   ),
                   _buildStatItem(
-                    'مكتملة',
+                    'تم التنفيذ',
                     completedTasks.toString(),
                     Icons.task_alt,
                     Colors.green,

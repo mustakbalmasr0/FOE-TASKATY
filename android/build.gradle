@@ -1,5 +1,8 @@
 buildscript {
     dependencies {
+        // START: FlutterFire Configuration
+        classpath 'com.google.gms:google-services:4.3.15'
+        // END: FlutterFire Configuration
         classpath 'com.android.tools.build:gradle:8.3.0' // ✅ updated
     }
 }
