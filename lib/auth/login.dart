@@ -851,3 +851,4 @@ class _LoginScreenState extends State<LoginScreen>
   }
 }
 
+// Here there is a fcm_token didn't saved in the database
