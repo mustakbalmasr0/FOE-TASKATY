@@ -6,6 +6,9 @@ import 'package:taskaty/pages/user_page.dart'; // Assuming this path is correct
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'dart:ui'; // For ImageFilter.blur, if you decide to re-introduce it subtly
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
+import 'package:taskaty/services/notification_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -145,6 +148,26 @@ class _LoginScreenState extends State<LoginScreen>
             .select('role')
             .eq('id', userId)
             .single();
+
+        // --- Enhanced FCM token checking and saving ---
+        if (!kIsWeb) {
+          try {
+            // Check if user has FCM token, if not create and save a new one
+            await NotificationService.checkAndEnsureFCMToken(userId);
+            debugPrint('FCM token checked and ensured for user: $userId');
+          } catch (e) {
+            debugPrint('Failed to check/ensure FCM token: $e');
+            
+            // Additional fallback
+            try {
+              await NotificationService.getAndSaveFCMToken(userId);
+              debugPrint('Fallback FCM token save successful');
+            } catch (fallbackError) {
+              debugPrint('All FCM token operations failed: $fallbackError');
+            }
+          }
+        }
+        // ----------------------------------------
 
         if (response != null) {
           final userRole = response['role'] as String?;
@@ -827,3 +850,4 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 }
+

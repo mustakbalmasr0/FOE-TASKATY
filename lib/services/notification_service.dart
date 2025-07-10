@@ -7,15 +7,21 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
 
 class NotificationService {
-  static final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
-  static final FlutterLocalNotificationsPlugin _localNotifications = 
+  static final FirebaseMessaging _firebaseMessaging =
+      FirebaseMessaging.instance;
+  static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
-  static final _supabase = Supabase.instance.client;
+  static SupabaseClient? _supabase;
+
+  static SupabaseClient get supabase => _supabase ?? Supabase.instance.client;
 
   // Notification channels
-  static const AndroidNotificationChannel _highImportanceChannel = AndroidNotificationChannel(
+  static const AndroidNotificationChannel _highImportanceChannel =
+      AndroidNotificationChannel(
     'high_importance_channel',
     'High Importance Notifications',
     description: 'This channel is used for important notifications.',
@@ -24,7 +30,8 @@ class NotificationService {
     enableVibration: true,
   );
 
-  static const AndroidNotificationChannel _taskChannel = AndroidNotificationChannel(
+  static const AndroidNotificationChannel _taskChannel =
+      AndroidNotificationChannel(
     'task_notifications',
     'Task Notifications',
     description: 'Notifications for task assignments and updates',
@@ -35,22 +42,50 @@ class NotificationService {
 
   /// Initialize the notification service
   static Future<void> initialize() async {
+    // Load environment variables
+    await dotenv.load(fileName: "assets/.env");
+
+    // Initialize Supabase
+    await _initializeSupabase();
+
     // Request permissions
     await _requestPermissions();
-    
+
     // Initialize local notifications
     await _initializeLocalNotifications();
-    
+
     // Create notification channels
     await _createNotificationChannels();
-    
+
     // Set up message handlers
     _setupMessageHandlers();
   }
 
+  /// Initialize Supabase with environment variables
+  static Future<void> _initializeSupabase() async {
+    final supabaseUrl = dotenv.env['SUPABASE_URL'];
+    final supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
+
+    if (supabaseUrl == null || supabaseApiKey == null) {
+      throw Exception(
+          'SUPABASE_URL or SUPABASE_API_KEY is missing in assets/.env');
+    }
+
+    await Supabase.initialize(
+      url: supabaseUrl,
+      anonKey: supabaseApiKey,
+      authOptions: const FlutterAuthClientOptions(
+        authFlowType: AuthFlowType.pkce,
+      ),
+    );
+
+    _supabase = Supabase.instance.client;
+  }
+
   /// Request notification permissions
   static Future<void> _requestPermissions() async {
-    final NotificationSettings settings = await _firebaseMessaging.requestPermission(
+    final NotificationSettings settings =
+        await _firebaseMessaging.requestPermission(
       alert: true,
       announcement: false,
       badge: true,
@@ -70,7 +105,8 @@ class NotificationService {
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const InitializationSettings initializationSettings = InitializationSettings(
+    const InitializationSettings initializationSettings =
+        InitializationSettings(
       android: initializationSettingsAndroid,
     );
 
@@ -96,7 +132,7 @@ class NotificationService {
   static void _setupMessageHandlers() {
     // Handle foreground messages
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-    
+
     // Handle notification taps when app is in background
     FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
   }
@@ -105,7 +141,7 @@ class NotificationService {
   static Future<void> _handleForegroundMessage(RemoteMessage message) async {
     if (kDebugMode) {
       print('Received foreground message: ${message.messageId}');
-      
+
       // Handle notification content (from Firebase Console or proper notification structure)
       if (message.notification != null) {
         print('Notification Title: ${message.notification!.title}');
@@ -117,14 +153,15 @@ class NotificationService {
           print('Apple notification data: ${message.notification!.apple}');
         }
       }
-      
+
       // Handle data payload (from programmatic sends or additional data)
       if (message.data.isNotEmpty) {
         print('Data payload: ${message.data}');
       } else {
-        print('No data payload (likely sent from Firebase Console without additional data)');
+        print(
+            'No data payload (likely sent from Firebase Console without additional data)');
       }
-      
+
       // Additional message properties
       print('Message from: ${message.from}');
       print('Message sent time: ${message.sentTime}');
@@ -139,11 +176,11 @@ class NotificationService {
     if (kDebugMode) {
       print('Notification tapped: ${message.messageId}');
     }
-    
+
     // Handle navigation based on notification data
     // For Firebase Console notifications, check if there's any data payload
     Map<String, dynamic> navigationData = message.data;
-    
+
     // If no data payload, try to extract from notification content
     if (navigationData.isEmpty && message.notification != null) {
       // Create a basic navigation data structure from notification
@@ -153,12 +190,13 @@ class NotificationService {
         'body': message.notification!.body,
       };
     }
-    
+
     await _handleNotificationNavigation(navigationData);
   }
 
   /// Handle notification response when tapped
-  static Future<void> _onNotificationTapped(NotificationResponse response) async {
+  static Future<void> _onNotificationTapped(
+      NotificationResponse response) async {
     if (response.payload != null) {
       try {
         final Map<String, dynamic> data = jsonDecode(response.payload!);
@@ -174,11 +212,12 @@ class NotificationService {
   }
 
   /// Handle navigation based on notification data
-  static Future<void> _handleNotificationNavigation(Map<String, dynamic> data) async {
+  static Future<void> _handleNotificationNavigation(
+      Map<String, dynamic> data) async {
     // Implement navigation logic based on notification type
     final String? notificationType = data['type'];
     final String? taskId = data['task_id'];
-    
+
     switch (notificationType) {
       case 'task_assigned':
         // Navigate to task details
@@ -206,10 +245,13 @@ class NotificationService {
     // Get notification type from data payload, fallback to general
     final String? notificationType = message.data['type'];
     final String channelId = _getChannelId(notificationType);
-    
-    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+
+    final AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
       channelId,
-      channelId == 'task_notifications' ? 'Task Notifications' : 'High Importance Notifications',
+      channelId == 'task_notifications'
+          ? 'Task Notifications'
+          : 'High Importance Notifications',
       importance: Importance.max,
       priority: Priority.high,
       showWhen: true,
@@ -228,7 +270,7 @@ class NotificationService {
       ...message.data,
       'type': notificationType ?? 'general',
     };
-    
+
     // Add notification content to payload if available
     if (message.notification != null) {
       payload['notification_title'] = message.notification!.title;
@@ -257,41 +299,116 @@ class NotificationService {
   }
 
   /// Get and save FCM token
-  static Future<String?> getAndSaveFCMToken([String? userId]) async {
+  static Future<void> getAndSaveFCMToken([String? userId]) async {
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token == null) return;
+
+    // Get user id if not provided
+    final uid = userId ?? supabase.auth.currentUser?.id;
+    if (uid == null) return;
+
+    // Save the token in the profiles table
+    await supabase.from('profiles').update({'fcm_token': token}).eq('id', uid);
+  }
+
+  /// Check if user has FCM token, if not create and save a new one
+  static Future<void> checkAndEnsureFCMToken([String? userId]) async {
     try {
-      final String? token = await _firebaseMessaging.getToken();
-      
-      if (token != null) {
+      // Get user id if not provided
+      final uid = userId ?? supabase.auth.currentUser?.id;
+      if (uid == null) {
         if (kDebugMode) {
-          print('FCM Token: $token');
+          print('No user logged in, cannot check FCM token');
         }
-        
-        // Save token if user is provided or current user exists
-        final String? currentUserId = userId ?? _supabase.auth.currentUser?.id;
-        if (currentUserId != null) {
-          await _saveFCMToken(token, currentUserId);
+        return;
+      }
+
+      // Check if user already has an FCM token in the database
+      final response = await supabase
+          .from('profiles')
+          .select('fcm_token')
+          .eq('id', uid)
+          .single();
+
+      final existingToken = response['fcm_token'] as String?;
+
+      if (existingToken != null && existingToken.isNotEmpty) {
+        if (kDebugMode) {
+          print(
+              'User already has FCM token: ${existingToken.substring(0, 20)}...');
+        }
+
+        // Verify the token is still valid by getting current token
+        final currentToken = await FirebaseMessaging.instance.getToken();
+
+        // If tokens don't match, update with current token
+        if (currentToken != null && currentToken != existingToken) {
+          await supabase
+              .from('profiles')
+              .update({'fcm_token': currentToken}).eq('id', uid);
+
+          if (kDebugMode) {
+            print('Updated FCM token for user: $uid');
+          }
+        }
+        return;
+      }
+
+      // No token exists, generate and save a new one
+      if (kDebugMode) {
+        print('No FCM token found for user: $uid, generating new token...');
+      }
+
+      final newToken = await FirebaseMessaging.instance.getToken();
+      if (newToken != null) {
+        await supabase
+            .from('profiles')
+            .update({'fcm_token': newToken}).eq('id', uid);
+
+        if (kDebugMode) {
+          print('New FCM token generated and saved for user: $uid');
+          print('Token: ${newToken.substring(0, 20)}...');
+        }
+      } else {
+        if (kDebugMode) {
+          print('Failed to generate FCM token for user: $uid');
         }
       }
-      
-      return token;
     } catch (e) {
       if (kDebugMode) {
-        print('Error getting FCM token: $e');
+        print('Error checking/ensuring FCM token: $e');
       }
-      return null;
+
+      // Fallback: try to generate and save token anyway
+      try {
+        final uid = userId ?? supabase.auth.currentUser?.id;
+        if (uid != null) {
+          final token = await FirebaseMessaging.instance.getToken();
+          if (token != null) {
+            await supabase
+                .from('profiles')
+                .update({'fcm_token': token}).eq('id', uid);
+
+            if (kDebugMode) {
+              print('Fallback: FCM token saved for user: $uid');
+            }
+          }
+        }
+      } catch (fallbackError) {
+        if (kDebugMode) {
+          print('Fallback FCM token generation also failed: $fallbackError');
+        }
+      }
     }
   }
 
   /// Save FCM token to Supabase
   static Future<void> _saveFCMToken(String token, String userId) async {
     try {
-      await _supabase.from('user_tokens').upsert({
-        'user_id': userId,
-        'fcm_token': token,
-        'updated_at': DateTime.now().toIso8601String(),
-        'device_type': defaultTargetPlatform.name,
-      });
-      
+      await supabase
+          .from('profiles')
+          .update({'fcm_token': token}).eq('id', userId);
+
       if (kDebugMode) {
         print('FCM token saved successfully');
       }
@@ -308,8 +425,8 @@ class NotificationService {
       if (kDebugMode) {
         print('FCM Token refreshed: $newToken');
       }
-      
-      final String? currentUserId = _supabase.auth.currentUser?.id;
+
+      final String? currentUserId = supabase.auth.currentUser?.id;
       if (currentUserId != null) {
         await _saveFCMToken(newToken, currentUserId);
       }
@@ -319,18 +436,17 @@ class NotificationService {
   /// Delete FCM token on logout
   static Future<void> deleteFCMToken() async {
     try {
-      final String? currentUserId = _supabase.auth.currentUser?.id;
+      final String? currentUserId = supabase.auth.currentUser?.id;
       if (currentUserId != null) {
-        await _supabase
-            .from('user_tokens')
-            .delete()
-            .eq('user_id', currentUserId);
-        
+        await supabase
+            .from('profiles')
+            .update({'fcm_token': null}).eq('id', currentUserId);
+
         if (kDebugMode) {
           print('FCM token deleted successfully');
         }
       }
-      
+
       await _firebaseMessaging.deleteToken();
     } catch (e) {
       if (kDebugMode) {
@@ -339,7 +455,7 @@ class NotificationService {
     }
   }
 
-  /// Send task assignment notification
+  /// Send task assignment notification using Firebase HTTP v1 API
   static Future<bool> sendTaskAssignmentNotification({
     required int taskId,
     required String assignedUserId,
@@ -347,28 +463,43 @@ class NotificationService {
     required String taskTitle,
   }) async {
     try {
-      final response = await _supabase.functions.invoke(
-        'notify-task-assignment',
-        body: {
-          'task_id': taskId,
-          'user_id': assignedUserId,
-          'assigned_by_id': assignedById,
-          'task_title': taskTitle,
-          'type': 'task_assigned',
-        },
-      );
+      // Get recipient's FCM token
+      final response = await supabase
+          .from('profiles')
+          .select('fcm_token, full_name')
+          .eq('id', assignedUserId)
+          .single();
 
-      if (response.status == 200) {
+      final fcmToken = response['fcm_token'] as String?;
+      if (fcmToken == null) {
         if (kDebugMode) {
-          print('Task assignment notification sent successfully');
-        }
-        return true;
-      } else {
-        if (kDebugMode) {
-          print('Failed to send task assignment notification: ${response.data}');
+          print('No FCM token found for user: $assignedUserId');
         }
         return false;
       }
+
+      // Get assigner's name
+      final assignerResponse = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', assignedById)
+          .single();
+
+      final assignerName = assignerResponse['full_name'] as String? ?? 'المدير';
+
+      // Send notification using Firebase HTTP v1 API
+      return await _sendFirebaseNotification(
+        fcmToken: fcmToken,
+        title: 'مهمة جديدة مُسندة إليك',
+        body: 'تم تكليفك بمهمة: $taskTitle من قِبل $assignerName',
+        data: {
+          'type': 'task_assigned',
+          'task_id': taskId.toString(),
+          'task_title': taskTitle,
+          'assigned_by': assignerName,
+          'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+        },
+      );
     } catch (e) {
       if (kDebugMode) {
         print('Error sending task assignment notification: $e');
@@ -386,29 +517,47 @@ class NotificationService {
     String? message,
   }) async {
     try {
-      final response = await _supabase.functions.invoke(
-        'notify-task-update',
-        body: {
-          'task_id': taskId,
-          'task_title': taskTitle,
-          'assigned_user_id': assignedUserId,
-          'update_type': updateType,
-          'type': updateType,
-          'message': message,
-        },
-      );
+      // Get recipient's FCM token
+      final response = await supabase
+          .from('profiles')
+          .select('fcm_token, full_name')
+          .eq('id', assignedUserId)
+          .single();
 
-      if (response.status == 200) {
+      final fcmToken = response['fcm_token'] as String?;
+      if (fcmToken == null) {
         if (kDebugMode) {
-          print('Task update notification sent successfully');
-        }
-        return true;
-      } else {
-        if (kDebugMode) {
-          print('Failed to send task update notification: ${response.data}');
+          print('No FCM token found for user: $assignedUserId');
         }
         return false;
       }
+
+      String title = 'تحديث المهمة';
+      String body = message ?? 'تم تحديث المهمة: $taskTitle';
+
+      switch (updateType) {
+        case 'completed':
+          title = 'تم إكمال المهمة';
+          body = 'تم إكمال المهمة: $taskTitle';
+          break;
+        case 'due_soon':
+          title = 'موعد تسليم المهمة قريب';
+          body = 'المهمة "$taskTitle" موعد تسليمها قريب';
+          break;
+      }
+
+      return await _sendFirebaseNotification(
+        fcmToken: fcmToken,
+        title: title,
+        body: body,
+        data: {
+          'type': updateType,
+          'task_id': taskId,
+          'task_title': taskTitle,
+          'message': message ?? '',
+          'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+        },
+      );
     } catch (e) {
       if (kDebugMode) {
         print('Error sending task update notification: $e');
@@ -426,28 +575,46 @@ class NotificationService {
     Map<String, dynamic>? data,
   }) async {
     try {
-      final response = await _supabase.functions.invoke(
-        'send-bulk-notifications',
-        body: {
-          'user_ids': userIds,
-          'title': title,
-          'body': body,
-          'type': notificationType ?? 'general',
-          'data': data ?? {},
-        },
-      );
+      // Get FCM tokens for all users
+      final response = await supabase
+          .from('profiles')
+          .select('fcm_token')
+          .inFilter('id', userIds);
 
-      if (response.status == 200) {
+      final fcmTokens = response
+          .map((profile) => profile['fcm_token'] as String?)
+          .where((token) => token != null)
+          .cast<String>()
+          .toList();
+
+      if (fcmTokens.isEmpty) {
         if (kDebugMode) {
-          print('Bulk notifications sent successfully');
-        }
-        return true;
-      } else {
-        if (kDebugMode) {
-          print('Failed to send bulk notifications: ${response.data}');
+          print('No FCM tokens found for provided users');
         }
         return false;
       }
+
+      // Send notifications to all tokens
+      int successCount = 0;
+      for (final token in fcmTokens) {
+        final success = await _sendFirebaseNotification(
+          fcmToken: token,
+          title: title,
+          body: body,
+          data: {
+            'type': notificationType ?? 'general',
+            'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+            ...?data,
+          },
+        );
+        if (success) successCount++;
+      }
+
+      if (kDebugMode) {
+        print('Bulk notifications sent: $successCount/${fcmTokens.length}');
+      }
+
+      return successCount > 0;
     } catch (e) {
       if (kDebugMode) {
         print('Error sending bulk notifications: $e');
@@ -456,9 +623,123 @@ class NotificationService {
     }
   }
 
+  /// Send Firebase notification using HTTP v1 API
+  static Future<bool> _sendFirebaseNotification({
+    required String fcmToken,
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+  }) async {
+    try {
+      final firebaseApiKey = dotenv.env['FIREBASE_API_KEY'];
+      if (firebaseApiKey == null || firebaseApiKey.isEmpty) {
+        if (kDebugMode) {
+          print('Firebase API key not found or empty in .env file');
+        }
+        return false;
+      }
+
+      // Validate API key format (should start with AIza)
+      if (!firebaseApiKey.startsWith('AIza')) {
+        if (kDebugMode) {
+          print('Invalid Firebase API key format. Should start with "AIza"');
+        }
+        return false;
+      }
+
+      final payload = {
+        'to': fcmToken,
+        'notification': {
+          'title': title,
+          'body': body,
+          'sound': 'default',
+          'badge': 1,
+        },
+        'data': data ?? {},
+        'android': {
+          'notification': {
+            'channel_id': 'task_notifications',
+            'priority': 'high',
+            'default_sound': true,
+            'default_vibrate_timings': true,
+          }
+        },
+        'apns': {
+          'payload': {
+            'aps': {
+              'sound': 'default',
+              'badge': 1,
+              'content_available': true,
+            }
+          }
+        }
+      };
+
+      if (kDebugMode) {
+        print(
+            'Sending FCM notification to token: ${fcmToken.substring(0, 20)}...');
+        print('Using API key: ${firebaseApiKey.substring(0, 10)}...');
+      }
+
+      final response = await http.post(
+        Uri.parse('https://fcm.googleapis.com/fcm/send'),
+        headers: {
+          'Authorization': 'key=$firebaseApiKey',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(payload),
+      );
+
+      if (kDebugMode) {
+        print('FCM Response status: ${response.statusCode}');
+        print('FCM Response headers: ${response.headers}');
+      }
+
+      // Check if response is JSON
+      final contentType = response.headers['content-type'];
+      if (contentType == null || !contentType.contains('application/json')) {
+        if (kDebugMode) {
+          print('Firebase returned non-JSON response');
+          print('Response body: ${response.body.substring(0, 500)}');
+        }
+        return false;
+      }
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        if (kDebugMode) {
+          print('Firebase notification sent successfully');
+          print('Response: $responseData');
+        }
+
+        // Check if there are any failures in the response
+        if (responseData['failure'] != null && responseData['failure'] > 0) {
+          if (kDebugMode) {
+            print('FCM reported failures: ${responseData['results']}');
+          }
+          return false;
+        }
+
+        return true;
+      } else {
+        if (kDebugMode) {
+          print('Failed to send Firebase notification: ${response.statusCode}');
+          print('Response: ${response.body}');
+        }
+        return false;
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error sending Firebase notification: $e');
+      }
+      return false;
+    }
+  }
+
   /// Check if notifications are enabled
   static Future<bool> areNotificationsEnabled() async {
-    final NotificationSettings settings = await _firebaseMessaging.getNotificationSettings();
+    final NotificationSettings settings =
+        await _firebaseMessaging.getNotificationSettings();
     return settings.authorizationStatus == AuthorizationStatus.authorized;
   }
 
@@ -466,25 +747,47 @@ class NotificationService {
   static Future<RemoteMessage?> getInitialMessage() async {
     return await _firebaseMessaging.getInitialMessage();
   }
+
+  /// Fetch the FCM token for the currently logged-in user from Supabase
+  static Future<String?> fetchCurrentUserFCMToken() async {
+    final String? userId = supabase.auth.currentUser?.id;
+    if (userId == null) return null;
+    try {
+      final response = await supabase
+          .from('profiles')
+          .select('fcm_token')
+          .eq('id', userId)
+          .single();
+      return response['fcm_token'] as String?;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error fetching FCM token from Supabase: $e');
+      }
+      return null;
+    }
+  }
 }
+
+// Ensure NotificationService.initialize() is called at app startup (e.g., in main.dart).
+// The onMessage handler already shows notifications immediately when a push is received.
 
 // Background message handler (must be top-level function)
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (kDebugMode) {
     print('Handling background message: ${message.messageId}');
-    
+
     // Log both notification and data content
     if (message.notification != null) {
       print('Background notification - Title: ${message.notification!.title}');
       print('Background notification - Body: ${message.notification!.body}');
     }
-    
+
     if (message.data.isNotEmpty) {
       print('Background data payload: ${message.data}');
     }
   }
-  
+
   // You can handle background messages here
   // For example, update local database, show notification, etc.
   // Note: You can't update UI from background handler

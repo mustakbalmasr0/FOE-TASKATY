@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:taskaty/services/notification_service.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class AdminDashboard extends StatefulWidget {
   static const route = '/admin/create-task';
@@ -158,6 +161,28 @@ class _AdminDashboardState extends State<AdminDashboard>
           'end_at': _endDate!.toIso8601String(),
           'status': _selectedStatus,
         });
+
+        // Fetch FCM token for the current logged-in user (admin)
+        final adminFcmToken =
+            await NotificationService.fetchCurrentUserFCMToken();
+
+        // Send notification to assigned user
+        final notificationSent = await sendFCMNotificationToUser(
+          userId,
+          'مهمة جديدة مُسندة إليك',
+          'تم تكليفك بمهمة: ${_titleController.text.trim()}',
+          {
+            'type': 'task_assigned',
+            'task_id': taskId.toString(),
+            'task_title': _titleController.text.trim(),
+          },
+        );
+        if (!notificationSent) {
+          _showSnackBar(
+            'تعذر إرسال إشعار للمستخدم: لم يتم العثور على رمز إشعارات (FCM) لهذا المستخدم. قد يكون المستخدم لم يسجل الدخول بعد.',
+            isError: true,
+          );
+        }
       }
 
       if (mounted) {
@@ -1146,5 +1171,39 @@ class _AdminDashboardState extends State<AdminDashboard>
         ),
       ),
     );
+  }
+
+  Future<bool> sendFCMNotificationToUser(String userId, String title,
+      String body, Map<String, dynamic> data) async {
+    // Fetch the user's FCM token from Supabase (now from profiles table)
+    final response = await Supabase.instance.client
+        .from('profiles')
+        .select('fcm_token')
+        .eq('id', userId)
+        .single();
+
+    final fcmToken = response?['fcm_token'];
+    if (fcmToken == null) return false;
+
+    // WARNING: Never expose your server key in production!
+    const String serverKey = 'YOUR_FCM_SERVER_KEY_HERE';
+
+    final fcmResponse = await http.post(
+      Uri.parse('https://fcm.googleapis.com/fcm/send'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'key=$serverKey',
+      },
+      body: jsonEncode({
+        'to': fcmToken,
+        'notification': {
+          'title': title,
+          'body': body,
+        },
+        'data': data,
+      }),
+    );
+
+    return fcmResponse.statusCode == 200;
   }
 }
