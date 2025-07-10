@@ -41,8 +41,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Environment files
+.env
+.env.*
 /assets/.env
 
 # Firebase and sensitive files
 /android/app/google-services.json
 /supabase/functions/service_account.json
+google-services.json
+**/service_account.json
