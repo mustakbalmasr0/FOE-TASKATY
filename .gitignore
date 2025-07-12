@@ -32,7 +32,7 @@ migrate_working_dir/
 /build/
 
 # Web related
-/web/build/
+
 /web/.dart_tool/
 .metadata
 *.js.map

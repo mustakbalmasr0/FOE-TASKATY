@@ -98,8 +98,7 @@ Future<void> _initializeSupabase() async {
   final supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
 
   if (supabaseUrl == null || supabaseApiKey == null) {
-    throw Exception(
-        'SUPABASE_URL or SUPABASE_API_KEY is missing in assets/.env');
+    throw Exception('SUPABASE_URL or SUPABASE_API_KEY is missing in .env');
   }
 
   try {
