@@ -112,17 +112,23 @@ class _AdminDashboardState extends State<AdminDashboard>
     setState(() => _isLoading = true);
 
     try {
+      // Get current admin user ID
+      final adminUserId = Supabase.instance.client.auth.currentUser!.id;
+      print('Admin user ID (who is creating the task): $adminUserId');
+      print('Selected user IDs (who will receive the task): $_selectedUserIds');
+
       // Insert task
       final taskResponse = await Supabase.instance.client.from('tasks').insert({
         'title': _titleController.text.trim(),
         'description': _descriptionController.text.trim(),
-        'created_by': Supabase.instance.client.auth.currentUser!.id,
+        'created_by': adminUserId,
         'created_at': _startDate!.toIso8601String(),
         'end_at': _endDate!.toIso8601String(),
         'priority': _selectedPriority,
       }).select();
 
       final taskId = taskResponse[0]['id'] as int;
+      print('Created task with ID: $taskId');
 
       // Upload attachments if any
       if (_selectedFiles.isNotEmpty) {
@@ -146,40 +152,81 @@ class _AdminDashboardState extends State<AdminDashboard>
               'file_name': file.name,
               'file_url': fileUrl,
               'file_type': file.extension,
-              'uploaded_by': Supabase.instance.client.auth.currentUser!.id,
+              'uploaded_by': adminUserId,
             });
           }
         }
       }
 
-      // Insert multiple task assignments
+      // Send notifications to assigned users using Edge Function
       for (String userId in _selectedUserIds) {
+        print('Processing assignment for user: $userId');
+
+        // Verify this is not the admin user
+        if (userId == adminUserId) {
+          print(
+              'WARNING: Trying to assign task to admin user (yourself). Skipping...');
+          continue;
+        }
+
+        // Get user details for logging
+        final userDetails = _users.firstWhere(
+          (u) => u['id'].toString() == userId,
+          orElse: () => {'name': 'Unknown User'},
+        );
+        print('Assigning to user: ${userDetails['name']} (ID: $userId)');
+
+        // Insert task assignment first
         await Supabase.instance.client.from('task_assignments').insert({
           'task_id': taskId,
-          'user_id': userId,
+          'user_id': userId, // This should be the assigned user, NOT the admin
           'created_at': _startDate!.toIso8601String(),
           'end_at': _endDate!.toIso8601String(),
           'status': _selectedStatus,
         });
 
-        // Fetch FCM token for the current logged-in user (admin)
-        final adminFcmToken =
-            await NotificationService.fetchCurrentUserFCMToken();
+        print('Task assignment created in database for user: $userId');
 
-        // Send notification to assigned user
-        final notificationSent = await sendFCMNotificationToUser(
-          userId,
-          'مهمة جديدة مُسندة إليك',
-          'تم تكليفك بمهمة: ${_titleController.text.trim()}',
-          {
-            'type': 'task_assigned',
-            'task_id': taskId.toString(),
-            'task_title': _titleController.text.trim(),
-          },
-        );
-        if (!notificationSent) {
+        // Call the Edge Function for notification
+        print('Calling Edge Function for user: $userId, task: $taskId');
+        print('Payload will be:');
+        print('  - task_id: $taskId');
+        print('  - user_id: $userId (SHOULD BE THE ASSIGNED USER)');
+        print('  - assigned_by_id: $adminUserId (SHOULD BE THE ADMIN)');
+
+        try {
+          final notificationResponse =
+              await Supabase.instance.client.functions.invoke(
+            'notify-task-assignment',
+            body: {
+              'task_id': taskId,
+              'user_id':
+                  userId, // This is the user who should receive the notification
+              'assigned_by_id':
+                  adminUserId, // This is the admin who created the task
+              'type': 'task_assigned',
+              'task_title': _titleController.text.trim(),
+            },
+          );
+
+          print(
+              'Edge Function response status: ${notificationResponse.status}');
+          print('Edge Function response data: ${notificationResponse.data}');
+
+          if (notificationResponse.status != 200) {
+            print('Edge Function error: ${notificationResponse.data}');
+            _showSnackBar(
+              'تم إنشاء المهمة بنجاح ولكن فشل في إرسال الإشعار للمستخدم ${userDetails['name']}',
+              isError: true,
+            );
+          } else {
+            print(
+                'Successfully sent notification to user: ${userDetails['name']}');
+          }
+        } catch (edgeFunctionError) {
+          print('Edge Function call failed: $edgeFunctionError');
           _showSnackBar(
-            'تعذر إرسال إشعار للمستخدم: لم يتم العثور على رمز إشعارات (FCM) لهذا المستخدم. قد يكون المستخدم لم يسجل الدخول بعد.',
+            'تم إنشاء المهمة بنجاح ولكن فشل في إرسال الإشعار للمستخدم ${userDetails['name']}: ${edgeFunctionError.toString()}',
             isError: true,
           );
         }
@@ -191,6 +238,7 @@ class _AdminDashboardState extends State<AdminDashboard>
         Navigator.pop(context);
       }
     } catch (e) {
+      print('Task creation error: $e');
       if (mounted) {
         _showSnackBar('خطأ: ${e.toString()}', isError: true);
       }
@@ -572,7 +620,6 @@ class _AdminDashboardState extends State<AdminDashboard>
                   'تعيين المهمة إلى',
                   style: TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const Spacer(),
@@ -589,7 +636,6 @@ class _AdminDashboardState extends State<AdminDashboard>
                       style: const TextStyle(
                         color: Color(0xFF6366F1),
                         fontSize: 12,
-                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -615,7 +661,6 @@ class _AdminDashboardState extends State<AdminDashboard>
                           'المستخدمون المحددون:',
                           style: TextStyle(
                             fontSize: 14,
-                            fontWeight: FontWeight.w600,
                             color: Colors.grey[700],
                           ),
                         ),
@@ -652,7 +697,6 @@ class _AdminDashboardState extends State<AdminDashboard>
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontSize: 10,
-                                              fontWeight: FontWeight.bold,
                                             ),
                                           )
                                         : null,
@@ -662,7 +706,6 @@ class _AdminDashboardState extends State<AdminDashboard>
                                     user['name'] ?? 'Unknown',
                                     style: const TextStyle(
                                       fontSize: 12,
-                                      fontWeight: FontWeight.w500,
                                       color: Color(0xFF6366F1),
                                     ),
                                   ),
@@ -736,7 +779,6 @@ class _AdminDashboardState extends State<AdminDashboard>
                                                 .toUpperCase(),
                                             style: const TextStyle(
                                               color: Color(0xFF6366F1),
-                                              fontWeight: FontWeight.bold,
                                             ),
                                           )
                                         : null,
@@ -746,7 +788,6 @@ class _AdminDashboardState extends State<AdminDashboard>
                                     child: Text(
                                       user['name'] ?? 'مستخدم غير معروف',
                                       style: TextStyle(
-                                        fontWeight: FontWeight.w500,
                                         color: isSelected
                                             ? const Color(0xFF6366F1)
                                             : Colors.black87,
@@ -796,7 +837,6 @@ class _AdminDashboardState extends State<AdminDashboard>
           title: const Text(
             'لوحة تحكم المدير',
             style: TextStyle(
-              fontWeight: FontWeight.bold,
               color: Color(0xFF1E293B),
               fontSize: 20,
             ),
@@ -885,7 +925,6 @@ class _AdminDashboardState extends State<AdminDashboard>
                                   'إنشاء مهمة جديدة',
                                   style: TextStyle(
                                     fontSize: 28,
-                                    fontWeight: FontWeight.bold,
                                     color: Colors.white,
                                   ),
                                   textAlign: TextAlign.center,
@@ -1172,38 +1211,38 @@ class _AdminDashboardState extends State<AdminDashboard>
       ),
     );
   }
+}
 
-  Future<bool> sendFCMNotificationToUser(String userId, String title,
-      String body, Map<String, dynamic> data) async {
-    // Fetch the user's FCM token from Supabase (now from profiles table)
-    final response = await Supabase.instance.client
-        .from('profiles')
-        .select('fcm_token')
-        .eq('id', userId)
-        .single();
+Future<bool> sendFCMNotificationToUser(
+    String userId, String title, String body, Map<String, dynamic> data) async {
+  // Fetch the user's FCM token from Supabase (now from profiles table)
+  final response = await Supabase.instance.client
+      .from('profiles')
+      .select('fcm_token')
+      .eq('id', userId)
+      .single();
 
-    final fcmToken = response?['fcm_token'];
-    if (fcmToken == null) return false;
+  final fcmToken = response?['fcm_token'];
+  if (fcmToken == null) return false;
 
-    // WARNING: Never expose your server key in production!
-    const String serverKey = 'YOUR_FCM_SERVER_KEY_HERE';
+  // WARNING: Never expose your server key in production!
+  const String serverKey = 'YOUR_FCM_SERVER_KEY_HERE';
 
-    final fcmResponse = await http.post(
-      Uri.parse('https://fcm.googleapis.com/fcm/send'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'key=$serverKey',
+  final fcmResponse = await http.post(
+    Uri.parse('https://fcm.googleapis.com/fcm/send'),
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'key=$serverKey',
+    },
+    body: jsonEncode({
+      'to': fcmToken,
+      'notification': {
+        'title': title,
+        'body': body,
       },
-      body: jsonEncode({
-        'to': fcmToken,
-        'notification': {
-          'title': title,
-          'body': body,
-        },
-        'data': data,
-      }),
-    );
+      'data': data,
+    }),
+  );
 
-    return fcmResponse.statusCode == 200;
-  }
+  return fcmResponse.statusCode == 200;
 }
