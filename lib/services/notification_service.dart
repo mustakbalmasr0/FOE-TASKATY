@@ -43,7 +43,7 @@ class NotificationService {
   /// Initialize the notification service
   static Future<void> initialize() async {
     // Load environment variables
-    await dotenv.load(fileName: "assets/.env");
+    await dotenv.load(fileName: "./.env");
 
     // Initialize Supabase
     await _initializeSupabase();
