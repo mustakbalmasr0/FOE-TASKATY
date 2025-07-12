@@ -63,8 +63,14 @@ const validatePayload = (payload: any): payload is NotificationPayload => {
 }
 
 serve(async (req) => {
+  // Add request logging
+  console.log('=== Edge Function notify-task-assignment called ===');
+  console.log('Request method:', req.method);
+  console.log('Request headers:', Object.fromEntries(req.headers.entries()));
+  
   // Handle CORS
   if (req.method === 'OPTIONS') {
+    console.log('Handling CORS preflight request');
     return new Response('ok', {
       headers: {
         'Access-Control-Allow-Origin': '*',
@@ -75,42 +81,62 @@ serve(async (req) => {
   }
 
   try {
+    console.log('Processing POST request...');
+    
     // Verify JWT token from Authorization header
     const authHeader = req.headers.get('Authorization')
+    console.log('Authorization header present:', !!authHeader);
+    
     if (!authHeader?.startsWith('Bearer ')) {
+      console.error('Invalid Authorization header format');
       throw new Error('Invalid Authorization header format. Must be Bearer token')
     }
 
     const token = authHeader.split(' ')[1]
     if (!token) {
+      console.error('No token provided in Authorization header');
       throw new Error('No token provided')
     }
+
+    console.log('Token extracted successfully');
 
     // Initialize Supabase client with service role key
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     
+    console.log('Supabase URL configured:', !!supabaseUrl);
+    console.log('Supabase Service Role Key configured:', !!supabaseKey);
+    
     if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase configuration');
       throw new Error('Missing Supabase configuration')
     }
 
     const supabaseClient = createClient(supabaseUrl, supabaseKey)
+    console.log('Supabase client initialized');
 
     // Verify the JWT token
+    console.log('Verifying JWT token...');
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token)
     
     if (authError || !user) {
+      console.error('JWT verification failed:', authError);
       throw new Error('Invalid authorization token')
     }
 
+    console.log('JWT verified successfully for user:', user.id);
+
     // Parse and validate request body
     let payload: NotificationPayload
+    let rawBody: string
     try {
-      payload = await req.json()
+      rawBody = await req.text()
+      console.log('Raw request body:', rawBody);
+      payload = JSON.parse(rawBody)
     } catch (error) {
       console.error('JSON parsing error:', error)
       return new Response(
-        JSON.stringify({ error: 'Invalid JSON in request body' }),
+        JSON.stringify({ error: 'Invalid JSON in request body', raw_body: rawBody }),
         { 
           status: 400,
           headers: { 'Content-Type': 'application/json' }
@@ -119,7 +145,7 @@ serve(async (req) => {
     }
 
     // Log incoming payload for debugging
-    console.log('Incoming payload:', JSON.stringify(payload, null, 2))
+    console.log('Parsed payload:', JSON.stringify(payload, null, 2))
 
     // Validate payload
     try {
@@ -136,84 +162,23 @@ serve(async (req) => {
     }
 
     console.log('Processing notification for task_id:', payload.task_id, 'user_id:', payload.user_id)
+    console.log('Notification will be sent TO user:', payload.user_id)
+    console.log('Notification is FROM user (admin):', payload.assigned_by_id)
 
-    // First, let's check if the task exists with detailed logging
-    console.log('Querying task with ID:', payload.task_id, 'type:', typeof payload.task_id)
-    
-    const { data: taskData, error: taskError } = await supabaseClient
-      .from('tasks')
-      .select('*')
-      .eq('id', payload.task_id)
-      .single()
-
-    // Enhanced error logging
-    if (taskError) {
-      console.error('Task query error details:', {
-        error: taskError,
-        task_id: payload.task_id,
-        task_id_type: typeof payload.task_id,
-        error_code: taskError.code,
-        error_message: taskError.message,
-        error_details: taskError.details
-      })
-      
-      // Check if it's a "not found" error specifically
-      if (taskError.code === 'PGRST116') {
-        // Let's try to get all tasks to see what exists
-        const { data: allTasks, error: allTasksError } = await supabaseClient
-          .from('tasks')
-          .select('id, title')
-          .limit(10)
-        
-        console.log('Available tasks:', allTasks)
-        console.log('All tasks query error:', allTasksError)
-        
-        return new Response(
-          JSON.stringify({ 
-            error: 'Task not found', 
-            task_id: payload.task_id,
-            available_tasks: allTasks || [],
-            details: taskError 
-          }),
-          { 
-            status: 404,
-            headers: { 'Content-Type': 'application/json' }
-          }
-        )
-      }
+    // Verify the user_id and assigned_by_id are different
+    if (payload.user_id === payload.assigned_by_id) {
+      console.error('ERROR: user_id and assigned_by_id are the same! This would send notification to admin.')
+      console.error('user_id (should be assigned user):', payload.user_id)
+      console.error('assigned_by_id (should be admin):', payload.assigned_by_id)
       
       return new Response(
         JSON.stringify({ 
-          error: 'Database error while fetching task', 
-          task_id: payload.task_id,
-          details: taskError 
+          error: 'Invalid assignment: Cannot assign task to yourself',
+          user_id: payload.user_id,
+          assigned_by_id: payload.assigned_by_id
         }),
         { 
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      )
-    }
-
-    if (!taskData) {
-      console.error('Task not found - no data returned for task_id:', payload.task_id)
-      
-      // Let's check what tasks exist
-      const { data: allTasks } = await supabaseClient
-        .from('tasks')
-        .select('id, title')
-        .limit(10)
-      
-      console.log('Available tasks:', allTasks)
-      
-      return new Response(
-        JSON.stringify({ 
-          error: 'Task not found', 
-          task_id: payload.task_id,
-          available_tasks: allTasks || []
-        }),
-        { 
-          status: 404,
+          status: 400,
           headers: { 'Content-Type': 'application/json' }
         }
       )
@@ -245,19 +210,19 @@ serve(async (req) => {
       // Continue with notification even if assignment logging fails
     }
 
-    // Get user's FCM token
-    console.log('Fetching user profile for:', payload.user_id)
+    // Get user's FCM token (THIS IS THE ASSIGNED USER, NOT THE ADMIN)
+    console.log('Fetching FCM token for ASSIGNED USER:', payload.user_id)
     const { data: userProfile, error: profileError } = await supabaseClient
       .from('profiles')
-      .select('fcm_token, full_name')
+      .select('fcm_token, name, full_name')
       .eq('id', payload.user_id)
       .single()
 
     if (profileError) {
-      console.error('Profile query error:', profileError)
+      console.error('Profile query error for assigned user:', profileError)
       return new Response(
         JSON.stringify({ 
-          error: 'User profile not found', 
+          error: 'Assigned user profile not found', 
           user_id: payload.user_id,
           details: profileError 
         }),
@@ -269,10 +234,11 @@ serve(async (req) => {
     }
 
     if (!userProfile?.fcm_token) {
-      console.error('No FCM token found for user:', payload.user_id)
+      console.error('No FCM token found for assigned user:', payload.user_id)
+      console.log('User profile:', userProfile)
       return new Response(
         JSON.stringify({ 
-          error: 'No FCM token found for user', 
+          error: 'No FCM token found for assigned user', 
           user_id: payload.user_id,
           profile: userProfile
         }),
@@ -283,189 +249,32 @@ serve(async (req) => {
       )
     }
 
-    console.log('User profile found:', { id: userProfile.id, has_fcm_token: !!userProfile.fcm_token })
+    console.log('Assigned user profile found:', { 
+      id: payload.user_id,
+      name: userProfile.name || userProfile.full_name || 'Unknown',
+      has_fcm_token: !!userProfile.fcm_token 
+    })
 
-    // Get assigned by user name
+    // Get assigned by user name (THIS IS THE ADMIN WHO CREATED THE TASK)
+    console.log('Fetching admin name for assigned_by_id:', payload.assigned_by_id)
     const { data: assignedByUser } = await supabaseClient
       .from('profiles')
-      .select('full_name')
+      .select('name, full_name')
       .eq('id', payload.assigned_by_id)
       .single()
 
-    const assignedByName = assignedByUser?.full_name || 'المدير'
-    const taskTitle = payload.task_title || taskData.title || taskData.name || 'مهمة جديدة'
-    const notificationType = payload.type || 'task_assigned'
-
-    console.log('Notification details:', {
-      taskTitle,
-      assignedByName,
-      notificationType
-    })
-
-    // Get Firebase project ID and service account key
-    const firebaseProjectId = Deno.env.get('FIREBASE_PROJECT_ID')
-    const firebaseServiceAccountKey = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_KEY')
+    const assignedByName = assignedByUser?.name || assignedByUser?.full_name || 'المدير'
+    const assignedUserName = userProfile.name || userProfile.full_name || 'المستخدم'
     
-    if (!firebaseProjectId) {
-      console.warn('FIREBASE_PROJECT_ID not configured, skipping FCM notification')
-      
-      // Log notification in database instead
-      try {
-        await supabaseClient.from('notifications').insert({
-          user_id: payload.user_id,
-          task_id: payload.task_id.toString(),
-          title: 'مهمة جديدة مُسندة إليك',
-          body: `تم تكليفك بمهمة: ${taskTitle} من قِبل ${assignedByName}`,
-          type: notificationType,
-          sent_at: new Date().toISOString(),
-          status: 'logged_only'
-        })
-      } catch (error) {
-        console.warn('Could not log notification to database:', error)
-      }
-
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'Task assigned successfully (notification logged only)',
-          task_id: payload.task_id,
-          user_id: payload.user_id,
-          task_title: taskTitle,
-          note: 'FCM not configured'
-        }),
-        { 
-          status: 200,
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
-          }
-        }
-      )
-    }
-
-    if (!firebaseServiceAccountKey) {
-      console.warn('FIREBASE_SERVICE_ACCOUNT_KEY not configured, skipping FCM notification')
-      
-      // Log notification in database instead
-      try {
-        await supabaseClient.from('notifications').insert({
-          user_id: payload.user_id,
-          task_id: payload.task_id.toString(),
-          title: 'مهمة جديدة مُسندة إليك',
-          body: `تم تكليفك بمهمة: ${taskTitle} من قِبل ${assignedByName}`,
-          type: notificationType,
-          sent_at: new Date().toISOString(),
-          status: 'logged_only'
-        })
-      } catch (error) {
-        console.warn('Could not log notification to database:', error)
-      }
-
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'Task assigned successfully (notification logged only)',
-          task_id: payload.task_id,
-          user_id: payload.user_id,
-          task_title: taskTitle,
-          note: 'FCM service account not configured'
-        }),
-        { 
-          status: 200,
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
-          }
-        }
-      )
-    }
-
-    // Generate OAuth2 access token for Firebase v1 API
-    let accessToken: string
-    try {
-      const serviceAccount = JSON.parse(firebaseServiceAccountKey)
-      
-      // Create JWT for OAuth2 flow
-      const now = Math.floor(Date.now() / 1000)
-      const jwtHeader = {
-        alg: 'RS256',
-        typ: 'JWT'
-      }
-      
-      const jwtPayload = {
-        iss: serviceAccount.client_email,
-        scope: 'https://www.googleapis.com/auth/firebase.messaging',
-        aud: 'https://oauth2.googleapis.com/token',
-        exp: now + 3600,
-        iat: now
-      }
-
-      // Create the JWT
-      const jwt = await createJWT(jwtHeader, jwtPayload, serviceAccount.private_key)
-      
-      // Exchange JWT for access token
-      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: new URLSearchParams({
-          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-          assertion: jwt
-        })
-      })
-
-      if (!tokenResponse.ok) {
-        const errorText = await tokenResponse.text()
-        console.error('Token response error:', errorText)
-        throw new Error(`Failed to get Firebase access token: ${tokenResponse.status}`)
-      }
-
-      const tokenData = await tokenResponse.json()
-      accessToken = tokenData.access_token
-      
-      console.log('Successfully obtained Firebase access token')
-    } catch (error) {
-      console.error('Failed to authenticate with Firebase:', error)
-      
-      // Log notification in database instead of failing
-      try {
-        await supabaseClient.from('notifications').insert({
-          user_id: payload.user_id,
-          task_id: payload.task_id.toString(),
-          title: 'مهمة جديدة مُسندة إليك',
-          body: `تم تكليفك بمهمة: ${taskTitle} من قِبل ${assignedByName}`,
-          type: notificationType,
-          sent_at: new Date().toISOString(),
-          status: 'auth_failed'
-        })
-      } catch (dbError) {
-        console.warn('Could not log notification to database:', dbError)
-      }
-
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'Task assigned successfully (notification auth failed)',
-          task_id: payload.task_id,
-          user_id: payload.user_id,
-          task_title: taskTitle,
-          note: 'Firebase authentication failed'
-        }),
-        { 
-          status: 200,
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
-          }
-        }
-      )
-    }
+    console.log('Assignment details:')
+    console.log('  - Task will be assigned TO:', assignedUserName, '(ID:', payload.user_id, ')')
+    console.log('  - Task is assigned BY:', assignedByName, '(ID:', payload.assigned_by_id, ')')
+    console.log('  - FCM token belongs to assigned user:', payload.user_id)
 
     // Prepare FCM payload using v1 API format
     const fcmPayload = {
       message: {
-        token: userProfile.fcm_token,
+        token: userProfile.fcm_token, // This token belongs to the ASSIGNED USER
         notification: {
           title: 'مهمة جديدة مُسندة إليك',
           body: `تم تكليفك بمهمة: ${taskTitle} من قِبل ${assignedByName}`,
@@ -475,6 +284,7 @@ serve(async (req) => {
           task_id: payload.task_id.toString(),
           task_title: taskTitle,
           assigned_by: assignedByName,
+          assigned_to: assignedUserName,
           due_date: taskData.due_date || '',
           priority: taskData.priority || 'medium',
           click_action: 'FLUTTER_NOTIFICATION_CLICK'
@@ -501,7 +311,10 @@ serve(async (req) => {
       }
     }
 
-    console.log('Sending FCM notification with payload:', JSON.stringify(fcmPayload, null, 2))
+    console.log('About to send FCM notification:')
+    console.log('  - TO user:', assignedUserName, '(FCM token from user_id:', payload.user_id, ')')
+    console.log('  - FROM user:', assignedByName, '(assigned_by_id:', payload.assigned_by_id, ')')
+    console.log('FCM payload:', JSON.stringify(fcmPayload, null, 2))
 
     // Send FCM notification using v1 API
     const fcmResponse = await fetch(
