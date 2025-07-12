@@ -343,7 +343,7 @@ class _UserDashboardState extends State<UserDashboard>
                   children: [
                     // Background image (same as in task_details_page.dart)
                     Image.asset(
-                      'assets/background.png',
+                      'assets/background.jpg',
                       fit: BoxFit.cover,
                     ),
                     // Gradient overlay and content
@@ -595,34 +595,39 @@ class _UserDashboardState extends State<UserDashboard>
     return Container(
       height: 50,
       margin: const EdgeInsets.only(bottom: 16),
-      child: ListView.builder(
+      child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        itemCount: _filterOptions.length,
-        itemBuilder: (context, index) {
-          final filter = _filterOptions[index];
-          final isSelected = _selectedFilter == filter;
+        child: Row(
+          children: List.generate(
+            _filterOptions.length,
+            (index) {
+              final filter = _filterOptions[index];
+              final isSelected = _selectedFilter == filter;
 
-          return Container(
-            margin: const EdgeInsets.only(left: 8),
-            child: FilterChip(
-              selected: isSelected,
-              label: Text(filter),
-              onSelected: (selected) {
-                setState(() {
-                  _selectedFilter = selected ? filter : 'الكل';
-                });
-              },
-              backgroundColor: colorScheme.surfaceContainer,
-              selectedColor: colorScheme.primaryContainer,
-              labelStyle: TextStyle(
-                color: isSelected
-                    ? colorScheme.onPrimaryContainer
-                    : colorScheme.onSurface,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          );
-        },
+              return Container(
+                margin: const EdgeInsets.only(left: 8),
+                child: FilterChip(
+                  selected: isSelected,
+                  label: Text(filter),
+                  onSelected: (selected) {
+                    setState(() {
+                      _selectedFilter = selected ? filter : 'الكل';
+                    });
+                  },
+                  backgroundColor: colorScheme.surfaceContainer,
+                  selectedColor: colorScheme.primaryContainer,
+                  labelStyle: TextStyle(
+                    color: isSelected
+                        ? colorScheme.onPrimaryContainer
+                        : colorScheme.onSurface,
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -755,73 +760,134 @@ class _UserDashboardState extends State<UserDashboard>
                       ),
                     ),
                   ],
+                  // --- Timer and End Date Section ---
+                  const SizedBox(height: 12),
+                  Builder(
+                    builder: (context) {
+                      DateTime? endDate;
+                      if (task['end_at'] != null) {
+                        endDate = DateTime.tryParse(task['end_at']);
+                      }
+                      String timerText = 'غير محدد';
+                      if (endDate != null) {
+                        final now = DateTime.now();
+                        final diff = endDate.difference(now);
+                        if (diff.isNegative) {
+                          timerText = 'انتهت المهمة';
+                        } else if (diff.inDays > 0) {
+                          timerText = 'متبقي ${diff.inDays} يوم';
+                        } else if (diff.inHours > 0) {
+                          timerText = 'متبقي ${diff.inHours} ساعة';
+                        } else if (diff.inMinutes > 0) {
+                          timerText = 'متبقي ${diff.inMinutes} دقيقة';
+                        } else {
+                          timerText = 'ينتهي قريباً';
+                        }
+                      }
+                      return Row(
+                        children: [
+                          Icon(Icons.timer_outlined,
+                              color: colorScheme.primary, size: 18),
+                          const SizedBox(width: 6),
+                          Text(
+                            timerText,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Icon(Icons.event, color: colorScheme.error, size: 18),
+                          const SizedBox(width: 6),
+                          Text(
+                            'تاريخ الانتهاء: ${_formatArabicDate(task['end_at'])}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.error,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  // --- End Timer and Date Section ---
                   const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color:
-                                  colorScheme.surfaceContainer.withOpacity(0.5),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: colorScheme.outline.withOpacity(0.2),
+                          Flexible(
+                            fit: FlexFit.loose,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
                               ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.calendar_today_outlined,
-                                  size: 14,
-                                  color: colorScheme.primary,
+                              decoration: BoxDecoration(
+                                color: colorScheme.surfaceContainer
+                                    .withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: colorScheme.outline.withOpacity(0.2),
                                 ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  _formatArabicDate(task['created_at']),
-                                  style: theme.textTheme.bodySmall?.copyWith(
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.calendar_today_outlined,
+                                    size: 14,
                                     color: colorScheme.primary,
-                                    fontWeight: FontWeight.w500,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _formatArabicDate(task['created_at']),
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: colorScheme.primary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color:
-                                  colorScheme.errorContainer.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: colorScheme.error.withOpacity(0.2),
+                          Flexible(
+                            fit: FlexFit.loose,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
                               ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.event_busy_outlined,
-                                  size: 14,
-                                  color: colorScheme.error,
+                              decoration: BoxDecoration(
+                                color:
+                                    colorScheme.errorContainer.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: colorScheme.error.withOpacity(0.2),
                                 ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'ينتهي: ${_formatArabicDate(task['end_at'])}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.event_busy_outlined,
+                                    size: 14,
                                     color: colorScheme.error,
-                                    fontWeight: FontWeight.w500,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'ينتهي: ${_formatArabicDate(task['end_at'])}',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: colorScheme.error,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
@@ -979,7 +1045,7 @@ class _UserDashboardState extends State<UserDashboard>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  task['title'] ?? 'مهمة بدون عنوان',
+                                  task['title'] ?? r'مهمة بدون عنوان',
                                   style:
                                       theme.textTheme.headlineSmall?.copyWith(
                                     fontWeight: FontWeight.bold,
@@ -997,7 +1063,7 @@ class _UserDashboardState extends State<UserDashboard>
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
-                                    'أولوية $priority',
+                                    r'أولوية $priority',
                                     style: theme.textTheme.bodySmall?.copyWith(
                                       color: _getPriorityColor(priority),
                                       fontWeight: FontWeight.bold,
@@ -1015,7 +1081,7 @@ class _UserDashboardState extends State<UserDashboard>
                       if (assignment['task']['description'] != null &&
                           assignment['task']['description'].isNotEmpty) ...[
                         Text(
-                          'الوصف',
+                          r'الوصف',
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -1040,7 +1106,7 @@ class _UserDashboardState extends State<UserDashboard>
 
                       // Attachments
                       Text(
-                        'المرفقات',
+                        r'المرفقات',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -1055,7 +1121,7 @@ class _UserDashboardState extends State<UserDashboard>
                             color: colorScheme.surfaceVariant,
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Text('لا توجد مرفقات'),
+                          child: const Text(r'لا توجد مرفقات'),
                         )
                       else
                         ListView.builder(
@@ -1087,7 +1153,7 @@ class _UserDashboardState extends State<UserDashboard>
                           Expanded(
                             child: OutlinedButton(
                               onPressed: () => Navigator.pop(context),
-                              child: const Text('إغلاق'),
+                              child: const Text(r'إغلاق'),
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -1095,14 +1161,14 @@ class _UserDashboardState extends State<UserDashboard>
                             child: ElevatedButton(
                               onPressed: () {
                                 Navigator.pop(context);
-                                _showSnackBar('تم تحديث حالة المهمة',
+                                _showSnackBar(r'تم تحديث حالة المهمة',
                                     isError: false);
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: colorScheme.primary,
                                 foregroundColor: colorScheme.onPrimary,
                               ),
-                              child: const Text('تحديث الحالة'),
+                              child: const Text(r'تحديث الحالة'),
                             ),
                           ),
                         ],

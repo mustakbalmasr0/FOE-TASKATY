@@ -4,7 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:taskaty/pages/notification.dart';
+import 'package:taskaty/services/notification_service.dart';
 import 'package:flutter/foundation.dart';
 
 final FlutterLocalNotificationsPlugin _localNotificationsPlugin =
@@ -19,5 +19,5 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 
   print("Handling background message: ${message.messageId}");
-  await NotificationService.showNotification(message);
+  await NotificationService.showLocalNotification(message);
 }
