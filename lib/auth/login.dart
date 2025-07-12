@@ -157,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen>
             debugPrint('FCM token checked and ensured for user: $userId');
           } catch (e) {
             debugPrint('Failed to check/ensure FCM token: $e');
-            
+
             // Additional fallback
             try {
               await NotificationService.getAndSaveFCMToken(userId);
@@ -305,33 +305,17 @@ class _LoginScreenState extends State<LoginScreen>
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
                                     children: [
-                                      // App Logo/Icon
-                                      Align(
-                                        alignment: Alignment.center,
-                                        child: Container(
-                                          width: 70, // Slightly smaller icon
-                                          height: 70,
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF667eea),
-                                            borderRadius:
-                                                BorderRadius.circular(18),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black
-                                                    .withOpacity(0.1),
-                                                blurRadius: 8,
-                                                offset: const Offset(0, 4),
-                                              ),
-                                            ],
-                                          ),
-                                          child: const Icon(
-                                            Icons.task_alt_rounded,
-                                            size: 36, // Slightly smaller icon
-                                            color: Colors.white,
+                                      /// App Logo/Icon
+                                        Align(
+                                          alignment: Alignment.center,
+                                          child: Image.asset(
+                                            'assets/icon.png', // Update path if needed
+                                            width: 70,
+                                            height: 70,
+                                            fit: BoxFit.contain,
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(
+                                        const SizedBox(
                                           height: 24), // Reduced spacing
 
                                       // Welcome Text
@@ -583,10 +567,11 @@ class _LoginScreenState extends State<LoginScreen>
                                           ),
                                         ],
                                       ),
-                                      child: const Icon(
-                                        Icons.task_alt_rounded,
-                                        size: 40,
-                                        color: Colors.white,
+                                      child: Image.asset(
+                                        'assets/logo.png', // Update path if needed
+                                        width: 40,
+                                        height: 40,
+                                        fit: BoxFit.contain,
                                       ),
                                     ),
                                   ),

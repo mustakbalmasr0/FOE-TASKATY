@@ -335,7 +335,7 @@ class _DashboardPageState extends State<DashboardPage>
         children: [
           Positioned.fill(
             child: Image.asset(
-              'assets/background.png',
+              'assets/background.jpg',
               fit: BoxFit.cover,
             ),
           ),

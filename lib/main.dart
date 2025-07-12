@@ -89,7 +89,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 Future<void> _initializeSupabase() async {
   // Guard against multiple initializations
-  if (_supabaseInitialized || Supabase.instance.client != null) {
+  if (_supabaseInitialized) {
     print('Supabase already initialized, skipping...');
     return;
   }
@@ -174,4 +174,3 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-

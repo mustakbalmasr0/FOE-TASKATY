@@ -343,7 +343,7 @@ class _UserDashboardState extends State<UserDashboard>
                   children: [
                     // Background image (same as in task_details_page.dart)
                     Image.asset(
-                      'assets/background.png',
+                      'assets/background.jpg',
                       fit: BoxFit.cover,
                     ),
                     // Gradient overlay and content
