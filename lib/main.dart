@@ -22,17 +22,16 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Load environment variables with platform-specific handling
-  try {
-    if (kIsWeb) {
-      // For web, use the file name without 'assets/' prefix
-      await dotenv.load(fileName: ".env");
-    } else {
-      // For mobile, use the full path
+  if (kIsWeb) {
+    // For web, skip dotenv loading - we'll use compile-time constants or platform env vars
+    print('Running on web - skipping .env file loading');
+  } else {
+    // For mobile, load from assets/.env file
+    try {
       await dotenv.load(fileName: "assets/.env");
+    } catch (e) {
+      print('Failed to load .env file: $e');
     }
-  } catch (e) {
-    print('Failed to load .env file: $e');
-    // Continue execution - you might want to use hardcoded values or handle this differently
   }
 
   // Initialize Firebase only on mobile platforms
@@ -105,18 +104,32 @@ Future<void> _initializeSupabase() async {
     return;
   }
 
-  final supabaseUrl = dotenv.env['SUPABASE_URL'];
-  final supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
+  String? supabaseUrl;
+  String? supabaseApiKey;
+
+  if (kIsWeb) {
+    // For web builds, use compile-time constants or environment variables
+    // You'll need to set these in your Vercel environment variables
+    supabaseUrl = const String.fromEnvironment('SUPABASE_URL');
+    supabaseApiKey = const String.fromEnvironment('SUPABASE_API_KEY');
+    
+    // If compile-time constants are empty, you can hardcode them for web
+    if (supabaseUrl.isEmpty || supabaseApiKey.isEmpty) {
+      // Option: Hardcode for web deployment (not recommended for production)
+      // supabaseUrl = 'your-supabase-url';
+      // supabaseApiKey = 'your-supabase-anon-key';
+      
+      throw Exception(
+          'Environment variables not found for web build. Set SUPABASE_URL and SUPABASE_API_KEY in Vercel environment variables.');
+    }
+  } else {
+    // For mobile, use dotenv
+    supabaseUrl = dotenv.env['SUPABASE_URL'];
+    supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
+  }
 
   if (supabaseUrl == null || supabaseApiKey == null) {
-    // For web, provide fallback or throw more descriptive error
-    if (kIsWeb) {
-      throw Exception(
-          'Environment variables not found. Make sure .env file is in the web folder or use direct configuration for web builds.');
-    } else {
-      throw Exception(
-          'SUPABASE_URL or SUPABASE_API_KEY is missing in assets/.env');
-    }
+    throw Exception('SUPABASE_URL or SUPABASE_API_KEY is missing');
   }
 
   try {
