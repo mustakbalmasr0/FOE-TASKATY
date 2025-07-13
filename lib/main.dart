@@ -21,8 +21,18 @@ bool _supabaseInitialized = false;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables
-  await dotenv.load(fileName: "assets/.env");
+  // Load environment variables with platform-specific handling
+  if (kIsWeb) {
+    // For web, skip dotenv loading - we'll use compile-time constants or platform env vars
+    print('Running on web - skipping .env file loading');
+  } else {
+    // For mobile, load from assets/.env file
+    try {
+      await dotenv.load(fileName: "assets/.env");
+    } catch (e) {
+      print('Failed to load .env file: $e');
+    }
+  }
 
   // Initialize Firebase only on mobile platforms
   if (!kIsWeb) {
@@ -94,12 +104,35 @@ Future<void> _initializeSupabase() async {
     return;
   }
 
-  final supabaseUrl = dotenv.env['SUPABASE_URL'];
-  final supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
+  String? supabaseUrl;
+  String? supabaseApiKey;
 
-  if (supabaseUrl == null || supabaseApiKey == null) {
-    throw Exception(
-        'SUPABASE_URL or SUPABASE_API_KEY is missing in assets/.env');
+  if (kIsWeb) {
+    // For web builds, use compile-time constants or environment variables
+    supabaseUrl = const String.fromEnvironment('SUPABASE_URL');
+    supabaseApiKey = const String.fromEnvironment('SUPABASE_API_KEY');
+
+    // Check if environment variables are provided
+    if (supabaseUrl.isEmpty || supabaseApiKey.isEmpty) {
+      print(
+          'Environment variables not found, using hardcoded values for web...');
+
+      // Use actual Supabase credentials for web deployment
+      supabaseUrl = 'https://gbdhgvwtfbfjxoioyuiw.supabase.co';
+      supabaseApiKey =
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZGhndnd0ZmJmanhvaW95dWl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk1NjAyMjMsImV4cCI6MjA2NTEzNjIyM30.-al9ws0fvh5TydlKBy26pPKF6bE5oJQe_qZqj2r1X6I';
+    }
+  } else {
+    // For mobile, use dotenv
+    supabaseUrl = dotenv.env['SUPABASE_URL'];
+    supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
+  }
+
+  if (supabaseUrl == null ||
+      supabaseApiKey == null ||
+      supabaseUrl.isEmpty ||
+      supabaseApiKey.isEmpty) {
+    throw Exception('SUPABASE_URL or SUPABASE_API_KEY is missing or empty');
   }
 
   try {
@@ -111,7 +144,7 @@ Future<void> _initializeSupabase() async {
       ),
     );
     _supabaseInitialized = true;
-    print('Supabase initialized successfully');
+    print('Supabase initialized successfully with URL: $supabaseUrl');
   } catch (e) {
     if (e.toString().contains('already initialized')) {
       print('Supabase was already initialized elsewhere');
@@ -131,7 +164,9 @@ class FCMTokenNavigatorObserver extends NavigatorObserver {
     if (routeName == '/admin/dashboard' ||
         routeName == '/admin/create-task' ||
         routeName == '/user/dashboard') {
-      NotificationService.getAndSaveFCMToken();
+      if (!kIsWeb) {
+        NotificationService.getAndSaveFCMToken();
+      }
     }
     super.didPush(route, previousRoute);
   }

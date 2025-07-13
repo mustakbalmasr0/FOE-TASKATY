@@ -87,7 +87,7 @@ flutter:
       fonts:
         - asset: assets/fonts/cairo/Cairo-SemiBold.ttf
         - asset: assets/fonts/cairo/Cairo-Regular.ttf
-          weight: 600
+          weight: 400
         - asset: assets/fonts/cairo/Cairo-Bold.ttf
           weight: 700
         - asset: assets/fonts/cairo/Cairo-Light.ttf
@@ -97,7 +97,6 @@ flutter:
         - asset: assets/fonts/cairo/Cairo-Medium.ttf
           weight: 500
   assets:
-    - assets/.env
     - assets/background.jpg
     - assets/background_login.png
     - assets/fonts/NotoSansArabic-VariableFont_wdth,wght.ttf # Ensure this is the correct path
