@@ -55,6 +55,8 @@ app.*.map.json
 .env.production
 .env.development
 .env
+assets/.env
+web/config.js
 
 # Firebase and sensitive files - CRITICAL: These contain API keys
 /android/app/google-services.json
