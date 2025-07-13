@@ -8,6 +8,7 @@ import 'package:path/path.dart' as path;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:taskaty/auth/login.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -67,6 +68,15 @@ class _SignupScreenState extends State<SignupScreen> {
 
       if (response.user != null) {
         String? avatarUrl;
+        String? fcmToken;
+
+        // Get FCM token
+        try {
+          fcmToken = await FirebaseMessaging.instance.getToken();
+        } catch (e) {
+          print('FCM token error: $e');
+          fcmToken = null;
+        }
 
         // Upload profile image if selected
         if (_imageBytes != null && _imageName != null) {
@@ -104,13 +114,14 @@ class _SignupScreenState extends State<SignupScreen> {
           }
         }
 
-        // Insert or update the user's profile
+        // Insert or update the user's profile, including fcm_token
         await supabase.from('profiles').upsert({
           'id': response.user!.id,
           'name': _nameController.text.trim(),
           'full_name': _emailController.text.trim(),
           'avatar_url': avatarUrl,
           'role': 'user', // Add default role
+          'fcm_token': fcmToken, // Save FCM token
         });
 
         if (mounted) {

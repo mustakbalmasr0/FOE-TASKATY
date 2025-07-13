@@ -43,7 +43,22 @@ class NotificationService {
   /// Initialize the notification service
   static Future<void> initialize() async {
     // Load environment variables
-    await dotenv.load(fileName: "assets/.env");
+    try {
+      await dotenv.load(fileName: "assets/.env");
+      if (kDebugMode) print('Loaded .env from assets/.env');
+    } catch (e) {
+      if (kDebugMode)
+        print('assets/.env not found, trying to load .env from root...');
+      try {
+        await dotenv.load(fileName: ".env");
+        if (kDebugMode) print('Loaded .env from project root');
+      } catch (e) {
+        if (kDebugMode)
+          print(
+              '.env not found in project root, using system environment variables');
+        // Optionally: dotenv.testLoad(fileInput: Platform.environment);
+      }
+    }
 
     // Initialize Supabase
     await _initializeSupabase();

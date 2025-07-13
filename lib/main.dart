@@ -21,8 +21,22 @@ bool _supabaseInitialized = false;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables
-  await dotenv.load(fileName: "assets/.env");
+  // Try to load environment variables from assets/.env (local development)
+  try {
+    await dotenv.load(fileName: "assets/.env");
+    print('Loaded .env from assets/.env');
+  } catch (e) {
+    print('assets/.env not found, trying to load .env from root...');
+    try {
+      await dotenv.load(fileName: ".env");
+      print('Loaded .env from project root');
+    } catch (e) {
+      print(
+          '.env not found in project root, using system environment variables');
+      // Optionally, you can manually assign dotenv.env from Platform.environment if needed
+      // dotenv.testLoad(fileInput: Platform.environment);
+    }
+  }
 
   // Initialize Firebase only on mobile platforms
   if (!kIsWeb) {
