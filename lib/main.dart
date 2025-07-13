@@ -15,27 +15,22 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:taskaty/services/notification_service.dart';
 
+// Add web-specific import
+import 'dart:html' as html show window;
+
 // Global flag to track Supabase initialization
 bool _supabaseInitialized = false;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Try to load environment variables from assets/.env (local development)
-  try {
+  // Load environment variables based on platform
+  if (kIsWeb) {
+    // For web, configuration is loaded from config.js
+    print('Loading configuration from config.js for web build');
+  } else {
+    // For mobile/desktop, load from .env file
     await dotenv.load(fileName: "assets/.env");
-    print('Loaded .env from assets/.env');
-  } catch (e) {
-    print('assets/.env not found, trying to load .env from root...');
-    try {
-      await dotenv.load(fileName: ".env");
-      print('Loaded .env from project root');
-    } catch (e) {
-      print(
-          '.env not found in project root, using system environment variables');
-      // Optionally, you can manually assign dotenv.env from Platform.environment if needed
-      // dotenv.testLoad(fileInput: Platform.environment);
-    }
   }
 
   // Initialize Firebase only on mobile platforms
@@ -108,11 +103,30 @@ Future<void> _initializeSupabase() async {
     return;
   }
 
-  final supabaseUrl = dotenv.env['SUPABASE_URL'];
-  final supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
+  String? supabaseUrl;
+  String? supabaseApiKey;
+
+  if (kIsWeb) {
+    // Load from window.appConfig for web
+    try {
+      final dynamic config = html.window as dynamic;
+      final appConfig = config['appConfig'];
+      if (appConfig != null) {
+        supabaseUrl = appConfig['SUPABASE_URL'];
+        supabaseApiKey = appConfig['SUPABASE_API_KEY'];
+      }
+    } catch (e) {
+      print('Failed to load config from window.appConfig: $e');
+    }
+  } else {
+    // Load from .env for other platforms
+    supabaseUrl = dotenv.env['SUPABASE_URL'];
+    supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
+  }
 
   if (supabaseUrl == null || supabaseApiKey == null) {
-    throw Exception('SUPABASE_URL or SUPABASE_API_KEY is missing in .env');
+    throw Exception(
+        'SUPABASE_URL or SUPABASE_API_KEY is missing in configuration');
   }
 
   try {
