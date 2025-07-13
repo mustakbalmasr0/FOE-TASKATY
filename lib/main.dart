@@ -107,24 +107,39 @@ Future<void> _initializeSupabase() async {
   String? supabaseApiKey;
 
   if (kIsWeb) {
-    // Load from window.appConfig for web
-    try {
-      final dynamic config = html.window as dynamic;
-      final appConfig = config['appConfig'];
-      if (appConfig != null) {
-        supabaseUrl = appConfig['SUPABASE_URL'];
-        supabaseApiKey = appConfig['SUPABASE_API_KEY'];
+    // For web builds, use compile-time environment variables (Vercel)
+    supabaseUrl = const String.fromEnvironment('SUPABASE_URL');
+    supabaseApiKey = const String.fromEnvironment('SUPABASE_API_KEY');
+
+    // If compile-time env vars are empty, fallback to window.appConfig
+    if (supabaseUrl.isEmpty || supabaseApiKey.isEmpty) {
+      try {
+        final dynamic config = html.window as dynamic;
+        final appConfig = config['appConfig'];
+        if (appConfig != null) {
+          supabaseUrl =
+              supabaseUrl.isEmpty ? appConfig['SUPABASE_URL'] : supabaseUrl;
+          supabaseApiKey = supabaseApiKey.isEmpty
+              ? appConfig['SUPABASE_API_KEY']
+              : supabaseApiKey;
+        }
+      } catch (e) {
+        print('Failed to load config from window.appConfig: $e');
       }
-    } catch (e) {
-      print('Failed to load config from window.appConfig: $e');
     }
+
+    print(
+        'Web build - Using SUPABASE_URL: ${supabaseUrl?.substring(0, 20)}...');
   } else {
     // Load from .env for other platforms
     supabaseUrl = dotenv.env['SUPABASE_URL'];
     supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
   }
 
-  if (supabaseUrl == null || supabaseApiKey == null) {
+  if (supabaseUrl == null ||
+      supabaseApiKey == null ||
+      supabaseUrl.isEmpty ||
+      supabaseApiKey.isEmpty) {
     throw Exception(
         'SUPABASE_URL or SUPABASE_API_KEY is missing in configuration');
   }
