@@ -109,18 +109,18 @@ Future<void> _initializeSupabase() async {
 
   if (kIsWeb) {
     // For web builds, use compile-time constants or environment variables
-    // You'll need to set these in your Vercel environment variables
     supabaseUrl = const String.fromEnvironment('SUPABASE_URL');
     supabaseApiKey = const String.fromEnvironment('SUPABASE_API_KEY');
-    
-    // If compile-time constants are empty, you can hardcode them for web
+
+    // Check if environment variables are provided
     if (supabaseUrl.isEmpty || supabaseApiKey.isEmpty) {
-      // Option: Hardcode for web deployment (not recommended for production)
-      // supabaseUrl = 'your-supabase-url';
-      // supabaseApiKey = 'your-supabase-anon-key';
-      
-      throw Exception(
-          'Environment variables not found for web build. Set SUPABASE_URL and SUPABASE_API_KEY in Vercel environment variables.');
+      print(
+          'Environment variables not found, using hardcoded values for web...');
+
+      // Use actual Supabase credentials for web deployment
+      supabaseUrl = 'https://gbdhgvwtfbfjxoioyuiw.supabase.co';
+      supabaseApiKey =
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZGhndnd0ZmJmanhvaW95dWl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk1NjAyMjMsImV4cCI6MjA2NTEzNjIyM30.-al9ws0fvh5TydlKBy26pPKF6bE5oJQe_qZqj2r1X6I';
     }
   } else {
     // For mobile, use dotenv
@@ -128,8 +128,11 @@ Future<void> _initializeSupabase() async {
     supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
   }
 
-  if (supabaseUrl == null || supabaseApiKey == null) {
-    throw Exception('SUPABASE_URL or SUPABASE_API_KEY is missing');
+  if (supabaseUrl == null ||
+      supabaseApiKey == null ||
+      supabaseUrl.isEmpty ||
+      supabaseApiKey.isEmpty) {
+    throw Exception('SUPABASE_URL or SUPABASE_API_KEY is missing or empty');
   }
 
   try {
@@ -141,7 +144,7 @@ Future<void> _initializeSupabase() async {
       ),
     );
     _supabaseInitialized = true;
-    print('Supabase initialized successfully');
+    print('Supabase initialized successfully with URL: $supabaseUrl');
   } catch (e) {
     if (e.toString().contains('already initialized')) {
       print('Supabase was already initialized elsewhere');
@@ -161,7 +164,9 @@ class FCMTokenNavigatorObserver extends NavigatorObserver {
     if (routeName == '/admin/dashboard' ||
         routeName == '/admin/create-task' ||
         routeName == '/user/dashboard') {
-      NotificationService.getAndSaveFCMToken();
+      if (!kIsWeb) {
+        NotificationService.getAndSaveFCMToken();
+      }
     }
     super.didPush(route, previousRoute);
   }
