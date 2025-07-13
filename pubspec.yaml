@@ -97,6 +97,7 @@ flutter:
         - asset: assets/fonts/cairo/Cairo-Medium.ttf
           weight: 500
   assets:
+       
     - assets/background.jpg
     - assets/background_login.png
     - assets/fonts/NotoSansArabic-VariableFont_wdth,wght.ttf # Ensure this is the correct path

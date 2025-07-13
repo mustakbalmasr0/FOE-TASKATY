@@ -17,6 +17,7 @@ import 'package:taskaty/services/notification_service.dart';
 
 // Global flag to track Supabase initialization
 bool _supabaseInitialized = false;
+bool _dotenvLoaded = false;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,8 +30,12 @@ void main() async {
     // For mobile, load from assets/.env file
     try {
       await dotenv.load(fileName: "assets/.env");
+      _dotenvLoaded = true;
+      print('Successfully loaded .env file');
     } catch (e) {
       print('Failed to load .env file: $e');
+      print('Will use fallback hardcoded values');
+      _dotenvLoaded = false;
     }
   }
 
@@ -123,9 +128,30 @@ Future<void> _initializeSupabase() async {
           'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZGhndnd0ZmJmanhvaW95dWl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk1NjAyMjMsImV4cCI6MjA2NTEzNjIyM30.-al9ws0fvh5TydlKBy26pPKF6bE5oJQe_qZqj2r1X6I';
     }
   } else {
-    // For mobile, use dotenv
-    supabaseUrl = dotenv.env['SUPABASE_URL'];
-    supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
+    // For mobile, try to use dotenv first, then fall back to hardcoded values
+    if (_dotenvLoaded) {
+      try {
+        supabaseUrl = dotenv.env['SUPABASE_URL'];
+        supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
+        print('Using values from .env file');
+      } catch (e) {
+        print('Error accessing dotenv variables: $e');
+        supabaseUrl = null;
+        supabaseApiKey = null;
+      }
+    }
+
+    // If dotenv wasn't loaded or values are null/empty, use hardcoded fallback values
+    if (!_dotenvLoaded ||
+        supabaseUrl == null ||
+        supabaseUrl.isEmpty ||
+        supabaseApiKey == null ||
+        supabaseApiKey.isEmpty) {
+      print('Using fallback hardcoded values for mobile...');
+      supabaseUrl = 'https://gbdhgvwtfbfjxoioyuiw.supabase.co';
+      supabaseApiKey =
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZGhndnd0ZmJmanhvaW95dWl3Iiwicm9zZSI6ImFub24iLCJpYXQiOjE3NDk1NjAyMjMsImV4cCI6MjA2NTEzNjIyM30.-al9ws0fvh5TydlKBy26pPKF6bE5oJQe_qZqj2r1X6I';
+    }
   }
 
   if (supabaseUrl == null ||
