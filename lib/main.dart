@@ -15,22 +15,24 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:taskaty/services/notification_service.dart';
 
-// Add web-specific import
-import 'dart:html' as html show window;
-
 // Global flag to track Supabase initialization
 bool _supabaseInitialized = false;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables based on platform
-  if (kIsWeb) {
-    // For web, configuration is loaded from config.js
-    print('Loading configuration from config.js for web build');
-  } else {
-    // For mobile/desktop, load from .env file
-    await dotenv.load(fileName: "assets/.env");
+  // Load environment variables with platform-specific handling
+  try {
+    if (kIsWeb) {
+      // For web, use the file name without 'assets/' prefix
+      await dotenv.load(fileName: ".env");
+    } else {
+      // For mobile, use the full path
+      await dotenv.load(fileName: "assets/.env");
+    }
+  } catch (e) {
+    print('Failed to load .env file: $e');
+    // Continue execution - you might want to use hardcoded values or handle this differently
   }
 
   // Initialize Firebase only on mobile platforms
@@ -103,45 +105,18 @@ Future<void> _initializeSupabase() async {
     return;
   }
 
-  String? supabaseUrl;
-  String? supabaseApiKey;
+  final supabaseUrl = dotenv.env['SUPABASE_URL'];
+  final supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
 
-  if (kIsWeb) {
-    // For web builds, use compile-time environment variables (Vercel)
-    supabaseUrl = const String.fromEnvironment('SUPABASE_URL');
-    supabaseApiKey = const String.fromEnvironment('SUPABASE_API_KEY');
-
-    // If compile-time env vars are empty, fallback to window.appConfig
-    if (supabaseUrl.isEmpty || supabaseApiKey.isEmpty) {
-      try {
-        final dynamic config = html.window as dynamic;
-        final appConfig = config['appConfig'];
-        if (appConfig != null) {
-          supabaseUrl =
-              supabaseUrl.isEmpty ? appConfig['SUPABASE_URL'] : supabaseUrl;
-          supabaseApiKey = supabaseApiKey.isEmpty
-              ? appConfig['SUPABASE_API_KEY']
-              : supabaseApiKey;
-        }
-      } catch (e) {
-        print('Failed to load config from window.appConfig: $e');
-      }
+  if (supabaseUrl == null || supabaseApiKey == null) {
+    // For web, provide fallback or throw more descriptive error
+    if (kIsWeb) {
+      throw Exception(
+          'Environment variables not found. Make sure .env file is in the web folder or use direct configuration for web builds.');
+    } else {
+      throw Exception(
+          'SUPABASE_URL or SUPABASE_API_KEY is missing in assets/.env');
     }
-
-    print(
-        'Web build - Using SUPABASE_URL: ${supabaseUrl?.substring(0, 20)}...');
-  } else {
-    // Load from .env for other platforms
-    supabaseUrl = dotenv.env['SUPABASE_URL'];
-    supabaseApiKey = dotenv.env['SUPABASE_API_KEY'];
-  }
-
-  if (supabaseUrl == null ||
-      supabaseApiKey == null ||
-      supabaseUrl.isEmpty ||
-      supabaseApiKey.isEmpty) {
-    throw Exception(
-        'SUPABASE_URL or SUPABASE_API_KEY is missing in configuration');
   }
 
   try {
