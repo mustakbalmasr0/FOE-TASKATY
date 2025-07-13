@@ -184,6 +184,28 @@ serve(async (req) => {
       )
     }
 
+    // Get task details
+    const { data: taskData, error: taskError } = await supabaseClient
+      .from('tasks')
+      .select('id, title, description, created_by, created_at')
+      .eq('id', payload.task_id)
+      .single()
+
+    if (taskError || !taskData) {
+      console.error('Task query error:', taskError)
+      return new Response(
+        JSON.stringify({ 
+          error: 'Task not found', 
+          task_id: payload.task_id,
+          details: taskError 
+        }),
+        { 
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
     console.log('Task found:', taskData)
 
     // Check if task_assignments table exists and create the assignment record
@@ -265,11 +287,77 @@ serve(async (req) => {
 
     const assignedByName = assignedByUser?.name || assignedByUser?.full_name || 'المدير'
     const assignedUserName = userProfile.name || userProfile.full_name || 'المستخدم'
+    const taskTitle = payload.task_title || taskData.title || 'مهمة جديدة'
+    const notificationType = payload.type || 'task_assigned'
     
     console.log('Assignment details:')
     console.log('  - Task will be assigned TO:', assignedUserName, '(ID:', payload.user_id, ')')
     console.log('  - Task is assigned BY:', assignedByName, '(ID:', payload.assigned_by_id, ')')
     console.log('  - FCM token belongs to assigned user:', payload.user_id)
+
+    // Get Firebase configuration
+    const firebaseProjectId = Deno.env.get('FIREBASE_PROJECT_ID')
+    const firebasePrivateKey = Deno.env.get('FIREBASE_PRIVATE_KEY')
+    const firebaseClientEmail = Deno.env.get('FIREBASE_CLIENT_EMAIL')
+
+    console.log('Firebase configuration check:')
+    console.log('  - FIREBASE_PROJECT_ID present:', !!firebaseProjectId)
+    console.log('  - FIREBASE_PRIVATE_KEY present:', !!firebasePrivateKey)
+    console.log('  - FIREBASE_CLIENT_EMAIL present:', !!firebaseClientEmail)
+
+    if (!firebaseProjectId || !firebasePrivateKey || !firebaseClientEmail) {
+      console.error('Missing Firebase configuration environment variables')
+      console.error('Required variables: FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL')
+      console.error('Available env vars:', Object.keys(Deno.env.toObject()).filter(key => key.startsWith('FIREBASE')))
+      
+      return new Response(
+        JSON.stringify({ 
+          error: 'Missing Firebase configuration',
+          details: 'Required environment variables: FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL',
+          available_firebase_vars: Object.keys(Deno.env.toObject()).filter(key => key.startsWith('FIREBASE'))
+        }),
+        { 
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    // Create JWT for Firebase authentication
+    const now = Math.floor(Date.now() / 1000)
+    const jwtHeader = {
+      alg: 'RS256',
+      typ: 'JWT'
+    }
+    
+    const jwtPayload = {
+      iss: firebaseClientEmail,
+      sub: firebaseClientEmail,
+      aud: 'https://oauth2.googleapis.com/token',
+      iat: now,
+      exp: now + 3600,
+      scope: 'https://www.googleapis.com/auth/firebase.messaging'
+    }
+
+    const jwt = await createJWT(jwtHeader, jwtPayload, firebasePrivateKey)
+
+    // Get OAuth2 access token
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`
+    })
+
+    const tokenData = await tokenResponse.json()
+    
+    if (!tokenResponse.ok) {
+      console.error('OAuth2 token error:', tokenData)
+      throw new Error('Failed to get OAuth2 access token')
+    }
+
+    const accessToken = tokenData.access_token
 
     // Prepare FCM payload using v1 API format
     const fcmPayload = {
@@ -404,42 +492,85 @@ serve(async (req) => {
 
 // JWT creation function for Firebase authentication
 async function createJWT(header: any, payload: any, privateKey: string): Promise<string> {
-  // Clean the private key
-  const cleanPrivateKey = privateKey
-    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
-    .replace(/-----END PRIVATE KEY-----/g, '')
-    .replace(/\s/g, '')
-  
-  // Convert base64 to ArrayBuffer
-  const keyData = Uint8Array.from(atob(cleanPrivateKey), c => c.charCodeAt(0))
-  
-  // Import the private key
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8',
-    keyData,
-    {
-      name: 'RSASSA-PKCS1-v1_5',
-      hash: 'SHA-256'
-    },
-    false,
-    ['sign']
-  )
-  
-  // Create the unsigned token
-  const headerB64 = base64UrlEncode(JSON.stringify(header))
-  const payloadB64 = base64UrlEncode(JSON.stringify(payload))
-  const unsignedToken = `${headerB64}.${payloadB64}`
-  
-  // Sign the token
-  const signature = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    cryptoKey,
-    new TextEncoder().encode(unsignedToken)
-  )
-  
-  const signatureB64 = base64UrlEncode(String.fromCharCode(...new Uint8Array(signature)))
-  
-  return `${unsignedToken}.${signatureB64}`
+  try {
+    console.log('Creating JWT with private key length:', privateKey.length)
+    
+    // Handle the private key - it might come with \n as literal characters or actual newlines
+    let processedKey = privateKey
+    
+    // Replace literal \n with actual newlines if they exist
+    if (privateKey.includes('\\n')) {
+      processedKey = privateKey.replace(/\\n/g, '\n')
+    }
+    
+    console.log('Processed key preview:', processedKey.substring(0, 50) + '...')
+    
+    // Clean the private key - remove headers and whitespace/newlines
+    const cleanPrivateKey = processedKey
+      .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+      .replace(/-----END PRIVATE KEY-----/g, '')
+      .replace(/\s/g, '')
+      .replace(/\n/g, '')
+      .replace(/\r/g, '')
+    
+    console.log('Clean private key length:', cleanPrivateKey.length)
+    console.log('Clean private key preview:', cleanPrivateKey.substring(0, 50) + '...')
+    
+    if (cleanPrivateKey.length === 0) {
+      throw new Error('Private key is empty after cleaning')
+    }
+    
+    // Validate that it's valid base64
+    try {
+      // Test if it's valid base64
+      atob(cleanPrivateKey.substring(0, 10))
+    } catch (e) {
+      console.error('Private key is not valid base64:', e)
+      throw new Error('Private key is not valid base64 format')
+    }
+    
+    // Convert base64 to ArrayBuffer
+    const keyData = Uint8Array.from(atob(cleanPrivateKey), c => c.charCodeAt(0))
+    console.log('Key data length:', keyData.length)
+    
+    // Import the private key
+    const cryptoKey = await crypto.subtle.importKey(
+      'pkcs8',
+      keyData,
+      {
+        name: 'RSASSA-PKCS1-v1_5',
+        hash: 'SHA-256'
+      },
+      false,
+      ['sign']
+    )
+    
+    console.log('Private key imported successfully')
+    
+    // Create the unsigned token
+    const headerB64 = base64UrlEncode(JSON.stringify(header))
+    const payloadB64 = base64UrlEncode(JSON.stringify(payload))
+    const unsignedToken = `${headerB64}.${payloadB64}`
+    
+    // Sign the token
+    const signature = await crypto.subtle.sign(
+      'RSASSA-PKCS1-v1_5',
+      cryptoKey,
+      new TextEncoder().encode(unsignedToken)
+    )
+    
+    const signatureB64 = base64UrlEncode(String.fromCharCode(...new Uint8Array(signature)))
+    
+    console.log('JWT created successfully')
+    return `${unsignedToken}.${signatureB64}`
+    
+  } catch (error) {
+    console.error('Error in createJWT:', error)
+    console.error('Private key type:', typeof privateKey)
+    console.error('Private key length:', privateKey?.length || 0)
+    console.error('Private key first 100 chars:', privateKey?.substring(0, 100) || 'undefined')
+    throw error
+  }
 }
 
 // Base64 URL encode helper
