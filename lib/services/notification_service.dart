@@ -481,7 +481,7 @@ class NotificationService {
       // Get recipient's FCM token
       final response = await supabase
           .from('profiles')
-          .select('fcm_token, full_name')
+          .select('fcm_token, name, full_name')
           .eq('id', assignedUserId)
           .single();
 
@@ -493,14 +493,16 @@ class NotificationService {
         return false;
       }
 
-      // Get assigner's name
+      // Get assigner's name from the name column first, then fallback to full_name
       final assignerResponse = await supabase
           .from('profiles')
-          .select('full_name')
+          .select('name, full_name')
           .eq('id', assignedById)
           .single();
 
-      final assignerName = assignerResponse['full_name'] as String? ?? 'المدير';
+      final assignerName = assignerResponse['name'] as String? ??
+          assignerResponse['full_name'] as String? ??
+          'المدير';
 
       // Send notification using Firebase HTTP v1 API
       return await _sendFirebaseNotification(
