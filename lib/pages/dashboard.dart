@@ -7,6 +7,7 @@ import 'package:taskaty/pages/modern_task_card.dart';
 import 'package:table_calendar/table_calendar.dart'; // Keep this import for isSameDay
 import 'package:taskaty/pages/task_calendar.dart'; // Import your new calendar widget
 import 'package:collection/collection.dart'; // **ADD THIS IMPORT**
+import 'package:taskaty/pages/appbar_sidebar.dart'; // Import the new Sidebar widget
 
 class DashboardPage extends StatefulWidget {
   static const route = '/admin/dashboard';
@@ -323,6 +324,27 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
+  // New method to handle select all functionality
+  void _handleSelectAll() {
+    final displayTasks = _selectedDay != null ? _filteredTasks : _allTasks;
+    setState(() {
+      if (_selectedTaskIds.length == displayTasks.length &&
+          displayTasks.isNotEmpty) {
+        _selectedTaskIds.clear();
+      } else {
+        _selectedTaskIds = displayTasks.map((t) => t['id'] as int).toSet();
+      }
+    });
+  }
+
+  // New method to handle show all tasks
+  void _handleShowAllTasks() {
+    setState(() {
+      _selectedDay = null; // Clear the selected day
+      _filteredTasks = _allTasks; // Show all tasks from the main list
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -341,71 +363,6 @@ class _DashboardPageState extends State<DashboardPage>
           ),
           Scaffold(
             backgroundColor: Colors.transparent,
-            appBar: AppBar(
-              title: const Text('لوحة المتابعة'),
-              actions: [
-                // Calendar Icon Button
-                IconButton(
-                  icon: const Icon(Icons.calendar_today),
-                  onPressed: _showCalendarBottomSheet, // Call the new method
-                  tooltip: 'اختيار تاريخ',
-                ),
-                // New "Show All Tasks" Button
-                IconButton(
-                  icon: const Icon(Icons.view_list),
-                  onPressed: () {
-                    setState(() {
-                      _selectedDay = null; // Clear the selected day
-                      _filteredTasks =
-                          _allTasks; // Show all tasks from the main list
-                    });
-                  },
-                  tooltip: 'عرض جميع المهام',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.picture_as_pdf),
-                  onPressed: _generatePdfReport,
-                  tooltip: 'تصدير تقرير PDF',
-                ),
-                IconButton(
-                  icon: Icon(
-                    _selectedTaskIds.length == displayTasks.length &&
-                            displayTasks.isNotEmpty
-                        ? Icons.check_box
-                        : Icons.check_box_outline_blank,
-                  ),
-                  tooltip: _selectedTaskIds.length == displayTasks.length &&
-                          displayTasks.isNotEmpty
-                      ? 'إلغاء تحديد الكل'
-                      : 'تحديد الكل',
-                  onPressed: () {
-                    setState(() {
-                      if (_selectedTaskIds.length == displayTasks.length &&
-                          displayTasks.isNotEmpty) {
-                        _selectedTaskIds.clear();
-                      } else {
-                        _selectedTaskIds =
-                            displayTasks.map((t) => t['id'] as int).toSet();
-                      }
-                    });
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh),
-                  onPressed: _fetchAllTasks,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.logout),
-                  onPressed: () async {
-                    await Supabase.instance.client.auth.signOut();
-                    if (mounted) {
-                      Navigator.of(context)
-                          .pushNamedAndRemoveUntil('/', (route) => false);
-                    }
-                  },
-                ),
-              ],
-            ),
             floatingActionButton: FloatingActionButton.extended(
               onPressed: () {
                 Navigator.of(context).pushNamed(AdminDashboard.route).then((_) {
@@ -421,7 +378,8 @@ class _DashboardPageState extends State<DashboardPage>
                     // Changed to CustomScrollView for overall scrolling
                     slivers: [
                       SliverToBoxAdapter(
-                        child: _buildStatsCard(colorScheme, theme, displayTasks),
+                        child:
+                            _buildStatsCard(colorScheme, theme, displayTasks),
                       ),
                       // The TaskCalendar widget is now opened via a button, so it's removed from here
                       if (displayTasks.isEmpty)
@@ -515,9 +473,9 @@ class _DashboardPageState extends State<DashboardPage>
                                               assignments);
 
                                       // Use firstWhereOrNull to find an 'in_progress' assignment
-                                      assignment =
-                                          typedAssignments.firstWhereOrNull(
-                                              (a) => a['status'] == 'in_progress');
+                                      assignment = typedAssignments
+                                          .firstWhereOrNull((a) =>
+                                              a['status'] == 'in_progress');
 
                                       // If no 'in_progress' assignment was found, use the first one
                                       if (assignment == null) {
@@ -529,15 +487,14 @@ class _DashboardPageState extends State<DashboardPage>
                                     // Now, pass `assignment` (which can be null) to the details page
                                     Navigator.of(context)
                                         .push(
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                TaskDetailsPage(
-                                              task: task,
-                                              assignment:
-                                                  assignment, // This is now correctly typed as Map<String, dynamic>?
-                                            ),
-                                          ),
-                                        )
+                                      MaterialPageRoute(
+                                        builder: (context) => TaskDetailsPage(
+                                          task: task,
+                                          assignment:
+                                              assignment, // This is now correctly typed as Map<String, dynamic>?
+                                        ),
+                                      ),
+                                    )
                                         .then((_) {
                                       _fetchAllTasks();
                                     });
@@ -553,13 +510,24 @@ class _DashboardPageState extends State<DashboardPage>
                     ],
                   ),
           ),
+          // Add the sidebar overlay
+          DashboardSidebar(
+            onCalendarPressed: _showCalendarBottomSheet,
+            onShowAllTasks: _handleShowAllTasks,
+            onGeneratePdf: _generatePdfReport,
+            onRefresh: _fetchAllTasks,
+            onSelectAll: _handleSelectAll,
+            isAllSelected: _selectedTaskIds.length == displayTasks.length,
+            selectedCount: _selectedTaskIds.length,
+            totalTasks: displayTasks.length,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildStatItem(String label, String value, IconData icon, Color color,
-      ThemeData theme) {
+  Widget _buildStatItem(
+      String label, String value, IconData icon, Color color, ThemeData theme) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -590,17 +558,19 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  Widget _buildStatsCard(
-      ColorScheme colorScheme, ThemeData theme, List<Map<String, dynamic>> tasks) {
+  Widget _buildStatsCard(ColorScheme colorScheme, ThemeData theme,
+      List<Map<String, dynamic>> tasks) {
     final completedTasks = tasks.where((task) {
       final assignments = task['task_assignments'] as List<dynamic>?;
-      return assignments?.any((a) => (a as Map<String, dynamic>)['status'] == 'completed') ??
+      return assignments?.any(
+              (a) => (a as Map<String, dynamic>)['status'] == 'completed') ??
           false;
     }).length;
 
     final inProgressTasks = tasks.where((task) {
       final assignments = task['task_assignments'] as List<dynamic>?;
-      return assignments?.any((a) => (a as Map<String, dynamic>)['status'] == 'in_progress') ??
+      return assignments?.any(
+              (a) => (a as Map<String, dynamic>)['status'] == 'in_progress') ??
           false;
     }).length;
 
