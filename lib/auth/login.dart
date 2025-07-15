@@ -21,6 +21,8 @@ class _LoginScreenState extends State<LoginScreen>
     with TickerProviderStateMixin {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _secPasswordController =
+      TextEditingController(); // New second password controller
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _isPasswordVisible = false;
@@ -123,6 +125,7 @@ class _LoginScreenState extends State<LoginScreen>
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _secPasswordController.dispose(); // Dispose new controller
     _slideController.dispose();
     _fadeController.dispose();
     _floatingController.dispose();
@@ -135,19 +138,30 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _isLoading = true);
     try {
       final supabase = Supabase.instance.client;
+
+      // First authenticate with email and password
       await supabase.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
       if (mounted) {
-        // Get the user's role from the profiles table
+        // Get the user's profile data including secpass
         final userId = supabase.auth.currentUser!.id;
         final response = await supabase
             .from('profiles')
-            .select('role')
+            .select('role, secpass')
             .eq('id', userId)
             .single();
+
+        // Validate second password
+        final storedSecpass = response['secpass'] as int?;
+        final enteredSecpass =
+            int.tryParse(_secPasswordController.text.trim()) ?? 0;
+
+        if (storedSecpass != enteredSecpass) {
+          throw Exception('كلمة المرور الثانية غير صحيحة');
+        }
 
         // --- Enhanced FCM token checking and saving ---
         if (!kIsWeb) {
@@ -306,16 +320,16 @@ class _LoginScreenState extends State<LoginScreen>
                                         CrossAxisAlignment.stretch,
                                     children: [
                                       /// App Logo/Icon
-                                        Align(
-                                          alignment: Alignment.center,
-                                          child: Image.asset(
-                                            'assets/icon.png', // Update path if needed
-                                            width: 70,
-                                            height: 70,
-                                            fit: BoxFit.contain,
-                                          ),
+                                      Align(
+                                        alignment: Alignment.center,
+                                        child: Image.asset(
+                                          'assets/icon.png', // Update path if needed
+                                          width: 70,
+                                          height: 70,
+                                          fit: BoxFit.contain,
                                         ),
-                                        const SizedBox(
+                                      ),
+                                      const SizedBox(
                                           height: 24), // Reduced spacing
 
                                       // Welcome Text
@@ -394,8 +408,29 @@ class _LoginScreenState extends State<LoginScreen>
                                           return null;
                                         },
                                       ),
-                                      const SizedBox(
-                                          height: 24), // Reduced spacing
+                                      const SizedBox(height: 16),
+
+                                      // Second Password Field
+                                      _buildModernTextField(
+                                        controller: _secPasswordController,
+                                        label: 'كلمة المرور الثانية',
+                                        icon: Icons.security,
+                                        obscureText: true,
+                                        keyboardType: TextInputType.number,
+                                        validator: (value) {
+                                          if (value == null || value.isEmpty) {
+                                            return 'يرجى إدخال كلمة المرور الثانية';
+                                          }
+                                          if (int.tryParse(value) == null) {
+                                            return 'يجب أن تكون كلمة المرور الثانية رقماً';
+                                          }
+                                          if (value.length < 4) {
+                                            return 'يجب أن تكون كلمة المرور الثانية على الأقل 4 أرقام';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(height: 24),
 
                                       // Login Button
                                       _isLoading
@@ -645,6 +680,28 @@ class _LoginScreenState extends State<LoginScreen>
                                       }
                                       if (value.length < 6) {
                                         return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 20),
+
+                                  // Second Password Field
+                                  _buildModernTextField(
+                                    controller: _secPasswordController,
+                                    label: 'كلمة المرور الثانية',
+                                    icon: Icons.security,
+                                    obscureText: true,
+                                    keyboardType: TextInputType.number,
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'يرجى إدخال كلمة المرور الثانية';
+                                      }
+                                      if (int.tryParse(value) == null) {
+                                        return 'يجب أن تكون كلمة المرور الثانية رقماً';
+                                      }
+                                      if (value.length < 4) {
+                                        return 'يجب أن تكون كلمة المرور الثانية على الأقل 4 أرقام';
                                       }
                                       return null;
                                     },
