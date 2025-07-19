@@ -132,8 +132,8 @@ class _SignupScreenState extends State<SignupScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content:
-                    Text('تم التسجيل بنجاح! يرجى التحقق من بريدك الإلكتروني.')),
+              content: Text('تم التسجيل بنجاح! يرجى تسجيل الدخول الآن.'),
+            ),
           );
           Navigator.pushReplacement(
             context,
@@ -188,7 +188,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       onTap: () {
                         Navigator.of(context).pushReplacement(
                           MaterialPageRoute(
-                              builder: (context) => const DashboardPage()),
+                              builder: (context) => const LoginScreen()),
                         );
                       },
                       child: Container(
@@ -349,7 +349,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                 ),
                               ),
                         const SizedBox(height: 16),
-                       
+
                         const SizedBox(height: 20), // Add bottom spacing
                       ],
                     ),

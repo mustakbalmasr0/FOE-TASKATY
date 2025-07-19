@@ -498,45 +498,6 @@ class _LoginScreenState extends State<LoginScreen>
                                             ),
                                       const SizedBox(
                                           height: 24), // Reduced spacing
-
-                                      // Sign Up Link
-                                      GestureDetector(
-                                        onTap: () {
-                                          Navigator.push(
-                                            context,
-                                            PageRouteBuilder(
-                                              pageBuilder: (context, animation,
-                                                      secondaryAnimation) =>
-                                                  const SignupScreen(),
-                                              transitionsBuilder: (context,
-                                                  animation,
-                                                  secondaryAnimation,
-                                                  child) {
-                                                return SlideTransition(
-                                                  position: Tween<Offset>(
-                                                    begin:
-                                                        const Offset(1.0, 0.0),
-                                                    end: Offset.zero,
-                                                  ).animate(animation),
-                                                  child: child,
-                                                );
-                                              },
-                                            ),
-                                          );
-                                        },
-                                        child: Text(
-                                          'ليس لديك حساب؟ إنشاء حساب جديد',
-                                          style: GoogleFonts.cairo(
-                                            color: Colors.blueAccent,
-                                            fontSize: 13, // Adjusted font size
-                                            fontWeight: FontWeight.bold,
-                                            decoration:
-                                                TextDecoration.underline,
-                                            decorationColor: Colors.blueAccent,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ),
                                     ],
                                   ),
                                 ),
@@ -762,43 +723,6 @@ class _LoginScreenState extends State<LoginScreen>
                                           ),
                                         ),
                                   const SizedBox(height: 32),
-
-                                  // Sign Up Link
-                                  GestureDetector(
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        PageRouteBuilder(
-                                          pageBuilder: (context, animation,
-                                                  secondaryAnimation) =>
-                                              const SignupScreen(),
-                                          transitionsBuilder: (context,
-                                              animation,
-                                              secondaryAnimation,
-                                              child) {
-                                            return SlideTransition(
-                                              position: Tween<Offset>(
-                                                begin: const Offset(1.0, 0.0),
-                                                end: Offset.zero,
-                                              ).animate(animation),
-                                              child: child,
-                                            );
-                                          },
-                                        ),
-                                      );
-                                    },
-                                    child: Text(
-                                      'ليس لديك حساب؟ إنشاء حساب جديد',
-                                      style: GoogleFonts.cairo(
-                                        color: Colors.blueAccent,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        decoration: TextDecoration.underline,
-                                        decorationColor: Colors.blueAccent,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
                                 ],
                               ),
                             ),
@@ -892,5 +816,73 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 }
+
+// Here there is a fcm_token didn't saved in the database
+                
+  Widget _buildModernTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool obscureText = false,
+    TextInputType keyboardType = TextInputType.text,
+    Widget? suffixIcon,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      obscureText: obscureText,
+      keyboardType: keyboardType,
+      textDirection: TextDirection.rtl,
+      style: const TextStyle(color: Colors.black),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.black),
+        prefixIcon: Icon(
+          icon,
+          color: Colors.grey,
+        ),
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.0),
+          borderSide: const BorderSide(color: Colors.grey),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.0),
+          borderSide: const BorderSide(color: Colors.grey),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.0),
+          borderSide: const BorderSide(color: Colors.blue),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.0),
+          borderSide: BorderSide(
+            color: Colors.red.withOpacity(0.6),
+            width: 2,
+          ),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.0),
+          borderSide: BorderSide(
+            color: Colors.red.withOpacity(0.8),
+            width: 2,
+          ),
+        ),
+        errorStyle: GoogleFonts.cairo(
+          color: Colors.red.shade700,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
+      ),
+      validator: validator,
+    );
+  }
+
 
 // Here there is a fcm_token didn't saved in the database

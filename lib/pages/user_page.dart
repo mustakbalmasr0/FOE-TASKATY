@@ -23,7 +23,7 @@ class _UserDashboardState extends State<UserDashboard>
     'الكل',
     'جديدة',
     'قيد التنفيذ',
-    'مكتملة'
+    'تم التفيذ'
   ];
 
   @override
@@ -216,7 +216,7 @@ class _UserDashboardState extends State<UserDashboard>
       case 'in_progress':
         return 'قيد التنفيذ';
       case 'completed':
-        return 'مكتملة';
+        return 'تم التنفيذ';
       default:
         return 'جديدة';
     }
@@ -530,7 +530,7 @@ class _UserDashboardState extends State<UserDashboard>
         const SizedBox(width: 12),
         Expanded(
           child: _buildStatCard(
-            title: 'مكتملة',
+            title: 'تم التفيذ',
             value: '${(_tasks.length * 0.3).round()}',
             icon: Icons.check_circle,
             color: Colors.green,
