@@ -5,6 +5,7 @@ class ModernTaskCard extends StatelessWidget {
   final bool isSelected;
   final Function(bool?) onSelectionChanged;
   final VoidCallback onTap;
+  final Function(Map<String, dynamic>)? onDelete;
   final ColorScheme colorScheme;
   final ThemeData theme;
 
@@ -14,6 +15,7 @@ class ModernTaskCard extends StatelessWidget {
     required this.isSelected,
     required this.onSelectionChanged,
     required this.onTap,
+    this.onDelete,
     required this.colorScheme,
     required this.theme,
   }) : super(key: key);
@@ -112,6 +114,10 @@ class ModernTaskCard extends StatelessWidget {
                           ),
                           _buildModernStatusChip(
                               status, statusColor, statusText),
+                          if (onDelete != null) ...[
+                            const SizedBox(width: 8),
+                            _buildDeleteButton(context),
+                          ],
                         ],
                       ),
 
@@ -535,7 +541,7 @@ class ModernTaskCard extends StatelessWidget {
   String _getStatusText(String status) {
     switch (status) {
       case 'completed':
-        return 'مكتملة';
+        return 'تم التنفيذ';
       case 'in_progress':
         return 'قيد التنفيذ';
       default:
@@ -562,5 +568,113 @@ class ModernTaskCard extends StatelessWidget {
     } catch (e) {
       return 'تاريخ غير صالح';
     }
+  }
+
+  Widget _buildDeleteButton(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _showDeleteConfirmation(context),
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Colors.red.withOpacity(0.3),
+          ),
+        ),
+        child: Icon(
+          Icons.delete_outline,
+          size: 18,
+          color: Colors.red,
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.warning_amber_outlined,
+                color: Colors.red,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'حذف المهمة',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'هل أنت متأكد من حذف هذه المهمة؟',
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceVariant.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  task['title'] ?? 'بدون عنوان',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'هذا الإجراء لا يمكن التراجع عنه.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: Colors.red.withOpacity(0.8),
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'إلغاء',
+                style: TextStyle(
+                  color: colorScheme.primary,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                onDelete?.call(task);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text('حذف'),
+            ),
+          ],
+        );
+      },
+    );
   }
 }

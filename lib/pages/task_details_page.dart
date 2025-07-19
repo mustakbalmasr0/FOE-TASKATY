@@ -1357,7 +1357,7 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
   String _getStatusText(String status) {
     switch (status) {
       case 'completed':
-        return 'مكتملة';
+        return 'تم التنفيذ';
       case 'in_progress':
         return 'قيد التنفيذ';
       default:

@@ -345,6 +345,49 @@ class _DashboardPageState extends State<DashboardPage>
     });
   }
 
+  Future<void> _deleteTask(Map<String, dynamic> task) async {
+    try {
+      // Delete task assignments first (foreign key constraint)
+      await Supabase.instance.client
+          .from('task_assignments')
+          .delete()
+          .eq('task_id', task['id']);
+
+      // Delete the task
+      await Supabase.instance.client
+          .from('tasks')
+          .delete()
+          .eq('id', task['id']);
+
+      // Remove from local lists
+      setState(() {
+        _allTasks.removeWhere((t) => t['id'] == task['id']);
+        _filteredTasks.removeWhere((t) => t['id'] == task['id']);
+        _selectedTaskIds.remove(task['id']);
+      });
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم حذف المهمة بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error deleting task: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('فشل في حذف المهمة: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -499,6 +542,7 @@ class _DashboardPageState extends State<DashboardPage>
                                       _fetchAllTasks();
                                     });
                                   },
+                                  onDelete: _deleteTask,
                                   colorScheme: colorScheme,
                                   theme: theme,
                                 );
@@ -648,7 +692,7 @@ class _DashboardPageState extends State<DashboardPage>
   String _getStatusText(String status) {
     switch (status) {
       case 'completed':
-        return 'مكتملة';
+        return 'تم التنفيذ';
       case 'in_progress':
         return 'قيد التنفيذ';
       default:

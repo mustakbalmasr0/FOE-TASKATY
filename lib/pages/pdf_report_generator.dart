@@ -219,7 +219,7 @@ class PdfReportGenerator {
             mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
             children: [
               _buildCircularStatCard('المجموع', totalTasks.toString(), const PdfColor.fromInt(0xFF3b82f6), ttf, ttfBold),
-              _buildCircularStatCard('مكتملة', completedTasks.toString(), const PdfColor.fromInt(0xFF10b981), ttf, ttfBold),
+              _buildCircularStatCard('تم التنفيذ', completedTasks.toString(), const PdfColor.fromInt(0xFF10b981), ttf, ttfBold),
               _buildCircularStatCard('قيد التنفيذ', inProgressTasks.toString(), const PdfColor.fromInt(0xFFf59e0b), ttf, ttfBold),
               _buildCircularStatCard('جديدة', newTasks.toString(), const PdfColor.fromInt(0xFF8b5cf6), ttf, ttfBold),
             ],
