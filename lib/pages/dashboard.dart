@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:taskaty/pages/admin_page.dart';
 import 'package:taskaty/pages/pdf_report_generator.dart';
 import 'package:taskaty/pages/task_details_page.dart';
-import 'package:taskaty/pages/modern_task_card.dart';
+import 'package:taskaty/pages/modern_task_card.dart' as task_card;
 import 'package:table_calendar/table_calendar.dart'; // Keep this import for isSameDay
 import 'package:taskaty/pages/task_calendar.dart'; // Import your new calendar widget
 import 'package:collection/collection.dart'; // **ADD THIS IMPORT**
@@ -106,10 +106,6 @@ class _DashboardPageState extends State<DashboardPage>
           .select('*')
           .order('created_at', ascending: false);
 
-      // Supabase select can return List<Map<String, dynamic>> or null if no rows,
-      // but type 'List<dynamic>' (which comes from .from and .select in some Supabase versions)
-      // needs to be handled carefully.
-      // Explicitly check for null and then cast.
       if (tasksResponse == null) {
         setState(() {
           _allTasks = [];
@@ -119,13 +115,11 @@ class _DashboardPageState extends State<DashboardPage>
         return;
       }
 
-      // Ensure tasks is correctly typed
       final tasks = List<Map<String, dynamic>>.from(tasksResponse);
 
       final assignmentsResponse =
           await Supabase.instance.client.from('task_assignments').select('*');
 
-      // Ensure assignments is correctly typed
       final assignments = assignmentsResponse != null
           ? List<Map<String, dynamic>>.from(assignmentsResponse)
           : <Map<String, dynamic>>[];
@@ -169,7 +163,30 @@ class _DashboardPageState extends State<DashboardPage>
           return assignment;
         }).toList();
 
-        task['task_assignments'] = taskAssignments;
+        // Remove duplicate assignments for the same user
+        final Map<String, Map<String, dynamic>> uniqueAssignments = {};
+        for (final assignment in taskAssignments) {
+          final userId = assignment['user_id']?.toString();
+          if (userId != null) {
+            if (!uniqueAssignments.containsKey(userId)) {
+              uniqueAssignments[userId] = assignment;
+            } else {
+              // Keep the most recent assignment status
+              final existingDate = DateTime.tryParse(
+                  uniqueAssignments[userId]!['created_at'] ?? '');
+              final currentDate =
+                  DateTime.tryParse(assignment['created_at'] ?? '');
+
+              if (currentDate != null &&
+                  existingDate != null &&
+                  currentDate.isAfter(existingDate)) {
+                uniqueAssignments[userId] = assignment;
+              }
+            }
+          }
+        }
+
+        task['task_assignments'] = uniqueAssignments.values.toList();
         if (task['created_by'] != null) {
           task['creator_profile'] = _usersCache[task['created_by'].toString()];
         }
@@ -490,7 +507,7 @@ class _DashboardPageState extends State<DashboardPage>
                                 final task = displayTasks[index];
                                 final isSelected =
                                     _selectedTaskIds.contains(task['id']);
-                                return ModernTaskCard(
+                                return task_card.ModernTaskCard(
                                   task: task,
                                   isSelected: isSelected,
                                   onSelectionChanged: (checked) {
@@ -804,3 +821,4 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 }
+

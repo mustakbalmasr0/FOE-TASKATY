@@ -117,6 +117,19 @@ class _AdminDashboardState extends State<AdminDashboard>
       print('Admin user ID (who is creating the task): $adminUserId');
       print('Selected user IDs (who will receive the task): $_selectedUserIds');
 
+      // Remove duplicates from selected user IDs
+      final uniqueUserIds = _selectedUserIds.toSet().toList();
+
+      // Remove admin user ID if accidentally included
+      uniqueUserIds.removeWhere((id) => id == adminUserId);
+
+      if (uniqueUserIds.isEmpty) {
+        _showSnackBar('لا يمكن تعيين المهمة لنفسك. يرجى اختيار مستخدمين آخرين.',
+            isError: true);
+        setState(() => _isLoading = false);
+        return;
+      }
+
       // Insert task
       final taskResponse = await Supabase.instance.client.from('tasks').insert({
         'title': _titleController.text.trim(),
@@ -158,16 +171,11 @@ class _AdminDashboardState extends State<AdminDashboard>
         }
       }
 
-      // Send notifications to assigned users using Edge Function
-      for (String userId in _selectedUserIds) {
-        print('Processing assignment for user: $userId');
+      // Prepare batch insert for task assignments
+      final List<Map<String, dynamic>> assignmentInserts = [];
 
-        // Verify this is not the admin user
-        if (userId == adminUserId) {
-          print(
-              'WARNING: Trying to assign task to admin user (yourself). Skipping...');
-          continue;
-        }
+      for (String userId in uniqueUserIds) {
+        print('Processing assignment for user: $userId');
 
         // Get user details for logging
         final userDetails = _users.firstWhere(
@@ -176,23 +184,33 @@ class _AdminDashboardState extends State<AdminDashboard>
         );
         print('Assigning to user: ${userDetails['name']} (ID: $userId)');
 
-        // Insert task assignment first
-        await Supabase.instance.client.from('task_assignments').insert({
+        // Add to batch insert
+        assignmentInserts.add({
           'task_id': taskId,
-          'user_id': userId, // This should be the assigned user, NOT the admin
+          'user_id': userId,
           'created_at': _startDate!.toIso8601String(),
           'end_at': _endDate!.toIso8601String(),
           'status': _selectedStatus,
         });
+      }
 
-        print('Task assignment created in database for user: $userId');
+      // Batch insert all assignments at once
+      if (assignmentInserts.isNotEmpty) {
+        await Supabase.instance.client
+            .from('task_assignments')
+            .insert(assignmentInserts);
+        print('Created ${assignmentInserts.length} task assignments');
+      }
 
-        // Call the Edge Function for notification
+      // Send notifications to assigned users using Edge Function
+      for (String userId in uniqueUserIds) {
+        // Get user details for notification
+        final userDetails = _users.firstWhere(
+          (u) => u['id'].toString() == userId,
+          orElse: () => {'name': 'Unknown User'},
+        );
+
         print('Calling Edge Function for user: $userId, task: $taskId');
-        print('Payload will be:');
-        print('  - task_id: $taskId');
-        print('  - user_id: $userId (SHOULD BE THE ASSIGNED USER)');
-        print('  - assigned_by_id: $adminUserId (SHOULD BE THE ADMIN)');
 
         try {
           final notificationResponse =
@@ -200,10 +218,8 @@ class _AdminDashboardState extends State<AdminDashboard>
             'notify-task-assignment',
             body: {
               'task_id': taskId,
-              'user_id':
-                  userId, // This is the user who should receive the notification
-              'assigned_by_id':
-                  adminUserId, // This is the admin who created the task
+              'user_id': userId,
+              'assigned_by_id': adminUserId,
               'type': 'task_assigned',
               'task_title': _titleController.text.trim(),
             },
