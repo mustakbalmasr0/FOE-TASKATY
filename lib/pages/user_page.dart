@@ -58,12 +58,15 @@ class _UserDashboardState extends State<UserDashboard>
     setState(() => _isLoading = true);
     try {
       final userId = Supabase.instance.client.auth.currentUser!.id;
+
+      // Use DISTINCT to prevent duplicate tasks and group by task_id
       final response =
           await Supabase.instance.client.from('task_assignments').select('''
             id,
             status,
             created_at,
             end_at,
+            task_id,
             task:tasks (
               id,
               title,
@@ -79,8 +82,37 @@ class _UserDashboardState extends State<UserDashboard>
           ''').eq('user_id', userId).order('created_at', ascending: false);
 
       if (!mounted) return;
+
+      // Process the response to remove duplicate tasks
+      final Map<int, Map<String, dynamic>> uniqueTasks = {};
+
+      for (final assignment in response) {
+        final taskData = assignment['task'] as Map<String, dynamic>?;
+        if (taskData != null) {
+          final taskId = taskData['id'] as int;
+
+          // If we haven't seen this task before, or if this assignment has a more recent status
+          if (!uniqueTasks.containsKey(taskId)) {
+            uniqueTasks[taskId] = assignment;
+          } else {
+            // Keep the assignment with the most recent status update
+            final existingAssignment = uniqueTasks[taskId]!;
+            final existingDate =
+                DateTime.tryParse(existingAssignment['created_at'] ?? '');
+            final currentDate =
+                DateTime.tryParse(assignment['created_at'] ?? '');
+
+            if (currentDate != null &&
+                existingDate != null &&
+                currentDate.isAfter(existingDate)) {
+              uniqueTasks[taskId] = assignment;
+            }
+          }
+        }
+      }
+
       setState(() {
-        _tasks = List<Map<String, dynamic>>.from(response);
+        _tasks = uniqueTasks.values.toList();
       });
       _animationController.forward();
     } catch (e) {
