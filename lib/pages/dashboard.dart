@@ -37,10 +37,14 @@ class _DashboardPageState extends State<DashboardPage>
 
   List<Map<String, dynamic>> _filteredTasks = [];
 
+  // Add real-time channel for tasks
+  late RealtimeChannel _tasksChannel;
+
   @override
   void initState() {
     super.initState();
     _fetchAllTasks();
+    _setupRealtimeListener(); // Add real-time listener
 
     _calendarAnimationController = AnimationController(
       vsync: this,
@@ -56,7 +60,37 @@ class _DashboardPageState extends State<DashboardPage>
   @override
   void dispose() {
     _calendarAnimationController.dispose();
+    _tasksChannel.unsubscribe(); // Clean up real-time listener
     super.dispose();
+  }
+
+  // Add method to setup real-time listener for tasks
+  void _setupRealtimeListener() {
+    _tasksChannel = Supabase.instance.client
+        .channel('dashboard_tasks_updates')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'tasks',
+          callback: (payload) {
+            if (mounted) {
+              // Refresh tasks when any task is updated, inserted, or deleted
+              _fetchAllTasks();
+            }
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'task_assignments',
+          callback: (payload) {
+            if (mounted) {
+              // Refresh tasks when assignments change
+              _fetchAllTasks();
+            }
+          },
+        )
+        .subscribe();
   }
 
   void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
@@ -190,6 +224,10 @@ class _DashboardPageState extends State<DashboardPage>
         if (task['created_by'] != null) {
           task['creator_profile'] = _usersCache[task['created_by'].toString()];
         }
+
+        // Ensure task has status from tasks table (this is the key change)
+        task['status'] = task['status'] ?? 'new';
+
         return task;
       }).toList();
 
@@ -224,27 +262,25 @@ class _DashboardPageState extends State<DashboardPage>
 
   Future<void> _updateTaskStatus(int taskId, String status) async {
     try {
-      final assignmentResponse = await Supabase.instance.client
+      // Update status in tasks table (primary source of truth)
+      await Supabase.instance.client
+          .from('tasks')
+          .update({'status': status}).eq('id', taskId);
+
+      // Also update assignment status to keep them in sync
+      await Supabase.instance.client
           .from('task_assignments')
-          .select()
-          .eq('task_id', taskId)
-          .single();
+          .update({'status': status}).eq('task_id', taskId);
 
-      if (assignmentResponse != null) {
-        await Supabase.instance.client
-            .from('task_assignments')
-            .update({'status': status}).eq('id', assignmentResponse['id']);
-
-        if (mounted) {
-          _fetchAllTasks();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content:
-                  Text('تم تحديث حالة المهمة إلى: ${_getStatusText(status)}'),
-              backgroundColor: _getStatusColor(status),
-            ),
-          );
-        }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text('تم تحديث حالة المهمة إلى: ${_getStatusText(status)}'),
+            backgroundColor: _getStatusColor(status),
+          ),
+        );
+        // Real-time listener will automatically refresh the tasks
       }
     } catch (e) {
       debugPrint('Error updating task status: $e');
@@ -621,18 +657,21 @@ class _DashboardPageState extends State<DashboardPage>
 
   Widget _buildStatsCard(ColorScheme colorScheme, ThemeData theme,
       List<Map<String, dynamic>> tasks) {
+    // Use status from tasks table instead of assignments
     final completedTasks = tasks.where((task) {
-      final assignments = task['task_assignments'] as List<dynamic>?;
-      return assignments?.any(
-              (a) => (a as Map<String, dynamic>)['status'] == 'completed') ??
-          false;
+      return task['status'] == 'completed';
     }).length;
 
     final inProgressTasks = tasks.where((task) {
-      final assignments = task['task_assignments'] as List<dynamic>?;
-      return assignments?.any(
-              (a) => (a as Map<String, dynamic>)['status'] == 'in_progress') ??
-          false;
+      return task['status'] == 'in_progress';
+    }).length;
+
+    final pendingTasks = tasks.where((task) {
+      return task['status'] == 'pending';
+    }).length;
+
+    final newTasks = tasks.where((task) {
+      return task['status'] == 'new' || task['status'] == null;
     }).length;
 
     return Card(
@@ -655,7 +694,7 @@ class _DashboardPageState extends State<DashboardPage>
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
-              // Show date if a day is selected (now that calendar is always visible)
+              // Show date if a day is selected
               if (_selectedDay != null)
                 Container(
                   margin: const EdgeInsets.only(bottom: 16),
@@ -673,8 +712,10 @@ class _DashboardPageState extends State<DashboardPage>
                     ),
                   ),
                 ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
+              // Updated stats grid with all statuses
+              Wrap(
+                spacing: 16,
+                runSpacing: 16,
                 children: [
                   _buildStatItem(
                     'إجمالي المهام',
@@ -684,7 +725,21 @@ class _DashboardPageState extends State<DashboardPage>
                     theme,
                   ),
                   _buildStatItem(
-                    'جاري التنفيذ',
+                    'جديدة',
+                    newTasks.toString(),
+                    Icons.fiber_new,
+                    Colors.grey,
+                    theme,
+                  ),
+                  _buildStatItem(
+                    'قيد الانتظار',
+                    pendingTasks.toString(),
+                    Icons.schedule,
+                    Colors.orange,
+                    theme,
+                  ),
+                  _buildStatItem(
+                    'قيد التنفيذ',
                     inProgressTasks.toString(),
                     Icons.pending_actions,
                     colorScheme.secondary,
@@ -821,4 +876,3 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 }
-

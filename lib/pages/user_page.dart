@@ -19,12 +19,7 @@ class _UserDashboardState extends State<UserDashboard>
   Map<String, dynamic>? _userProfile;
   List<Map<String, dynamic>> _taskAttachments = [];
 
-  final List<String> _filterOptions = [
-    'الكل',
-    'جديدة',
-    'قيد التنفيذ',
-    'تم التفيذ'
-  ];
+  final List<String> _filterOptions = ['الكل', 'قيد التنفيذ', 'تم التنفيذ'];
 
   final TextEditingController _noteController = TextEditingController();
   bool _isSavingNote = false;
@@ -248,14 +243,12 @@ class _UserDashboardState extends State<UserDashboard>
 
   String _getStatusText(String? status) {
     switch (status?.toLowerCase()) {
-      case 'pending':
-        return 'قيد الانتظار';
       case 'in_progress':
         return 'قيد التنفيذ';
       case 'completed':
         return 'تم التنفيذ';
       default:
-        return 'جديدة';
+        return 'قيد التنفيذ'; // Default to in_progress for users
     }
   }
 
@@ -634,6 +627,18 @@ class _UserDashboardState extends State<UserDashboard>
   }
 
   Widget _buildStatsSection(ColorScheme colorScheme, ThemeData theme) {
+    final inProgressTasks = _tasks.where((task) {
+      final taskData = task['task'] as Map<String, dynamic>;
+      final status = taskData['status'] ?? task['status'] ?? 'in_progress';
+      return status == 'in_progress';
+    }).length;
+
+    final completedTasks = _tasks.where((task) {
+      final taskData = task['task'] as Map<String, dynamic>;
+      final status = taskData['status'] ?? task['status'] ?? 'in_progress';
+      return status == 'completed';
+    }).length;
+
     return Row(
       children: [
         Expanded(
@@ -650,7 +655,7 @@ class _UserDashboardState extends State<UserDashboard>
         Expanded(
           child: _buildStatCard(
             title: 'قيد التنفيذ',
-            value: '${(_tasks.length * 0.6).round()}',
+            value: '$inProgressTasks',
             icon: Icons.schedule,
             color: colorScheme.secondary,
             colorScheme: colorScheme,
@@ -660,8 +665,8 @@ class _UserDashboardState extends State<UserDashboard>
         const SizedBox(width: 12),
         Expanded(
           child: _buildStatCard(
-            title: 'تم التفيذ',
-            value: '${(_tasks.length * 0.3).round()}',
+            title: 'تم التنفيذ',
+            value: '$completedTasks',
             icon: Icons.check_circle,
             color: Colors.green,
             colorScheme: colorScheme,
@@ -1236,20 +1241,12 @@ class _UserDashboardState extends State<UserDashboard>
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
-                            value: currentStatus,
+                            value: currentStatus == 'pending' ||
+                                    currentStatus == 'new'
+                                ? 'in_progress'
+                                : currentStatus,
                             isExpanded: true,
                             items: [
-                              DropdownMenuItem(
-                                value: 'pending',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.pending_actions,
-                                        color: Colors.orange, size: 20),
-                                    const SizedBox(width: 8),
-                                    const Text('قيد الانتظار'),
-                                  ],
-                                ),
-                              ),
                               DropdownMenuItem(
                                 value: 'in_progress',
                                 child: Row(
