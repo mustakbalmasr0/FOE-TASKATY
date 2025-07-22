@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:intl/intl.dart'; // For more flexible date formatting
-import 'package:intl/date_symbol_data_local.dart'; // <-- Add this import
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 class TaskDetailsPage extends StatefulWidget {
   final Map<String, dynamic> task;
@@ -33,6 +33,8 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
   DateTime? _startDate;
   DateTime? _endDate;
   List<Map<String, dynamic>> _attachments = [];
+  Map<String, dynamic> _taskData = {}; // Add this to store updated task data
+  late RealtimeChannel _taskChannel; // Add this for real-time updates
 
   @override
   void initState() {
@@ -49,12 +51,18 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
     });
     _initializeControllers();
     _loadAttachments();
+    _fetchTaskData(); // Fetch complete task data including status
+    _setupRealtimeListener(); // Add real-time listener
   }
 
   void _initializeControllers() {
     _titleController.text = widget.task['title'] ?? '';
     _descriptionController.text = widget.task['description'] ?? '';
-    _selectedStatus = widget.assignment?['status'] ?? 'new';
+    // Use task status from tasks table instead of assignment status
+    _selectedStatus = _taskData['status'] ??
+        widget.task['status'] ??
+        widget.assignment?['status'] ??
+        'new';
     _selectedPriority = widget.task['priority'] ?? 'عادي';
 
     // Safely parse dates, fallback to now if null or invalid
@@ -81,6 +89,7 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
 
   @override
   void dispose() {
+    _taskChannel.unsubscribe(); // Clean up the channel
     _titleController.dispose();
     _descriptionController.dispose();
     _startDateController.dispose();
@@ -88,49 +97,91 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
     super.dispose();
   }
 
-  Future<void> _selectDate(BuildContext context, bool isStart) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate:
-          isStart ? _startDate ?? DateTime.now() : _endDate ?? DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2101),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-                  primary: Theme.of(context)
-                      .colorScheme
-                      .primary, // Accent color for date picker
-                  onSurface: Theme.of(context)
-                      .colorScheme
-                      .onSurface, // Text color on surface
-                ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context)
-                    .colorScheme
-                    .primary, // Color for text buttons like 'CANCEL', 'OK'
-              ),
-            ),
+  // Add method to setup real-time listener
+  void _setupRealtimeListener() {
+    _taskChannel = Supabase.instance.client
+        .channel('task_${widget.task['id']}_updates')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'tasks',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: widget.task['id'],
           ),
-          child: child!,
-        );
-      },
-    );
+          callback: (payload) {
+            if (mounted) {
+              // Update local task data when database changes
+              final newData = payload.newRecord;
+              setState(() {
+                _taskData = {..._taskData, ...newData};
+                _selectedStatus = newData['status'] ?? _selectedStatus;
+                _selectedPriority = newData['priority'] ?? _selectedPriority;
 
-    if (picked != null) {
-      setState(() {
-        if (isStart) {
-          _startDate = picked;
-          _startDateController.text =
-              _formatArabicDate(picked.toIso8601String());
-        } else {
-          _endDate = picked;
-          _endDateController.text = _formatArabicDate(picked.toIso8601String());
-        }
-      });
-    }
+                // Update controllers if not editing
+                if (!_isEditing) {
+                  _titleController.text =
+                      newData['title'] ?? _titleController.text;
+                  _descriptionController.text =
+                      newData['description'] ?? _descriptionController.text;
+
+                  // Update date controllers
+                  if (newData['created_at'] != null) {
+                    _startDateController.text =
+                        _formatArabicDate(newData['created_at']);
+                    try {
+                      _startDate = DateTime.parse(newData['created_at']);
+                    } catch (_) {}
+                  }
+                  if (newData['end_at'] != null) {
+                    _endDateController.text =
+                        _formatArabicDate(newData['end_at']);
+                    try {
+                      _endDate = DateTime.parse(newData['end_at']);
+                    } catch (_) {}
+                  }
+                }
+              });
+
+              // Show a subtle notification about the update
+              if (!_isEditing) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text('تم تحديث المهمة'),
+                    duration: const Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                    backgroundColor: Colors.blue.shade600,
+                  ),
+                );
+              }
+            }
+          },
+        )
+        .subscribe();
+  }
+
+  // Also listen to task assignments changes
+  void _setupAssignmentRealtimeListener() {
+    final assignmentChannel = Supabase.instance.client
+        .channel('task_assignments_${widget.task['id']}_updates')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'task_assignments',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'task_id',
+            value: widget.task['id'],
+          ),
+          callback: (payload) {
+            if (mounted && !_isEditing) {
+              // Refresh task data when assignments are updated
+              _fetchTaskData();
+            }
+          },
+        )
+        .subscribe();
   }
 
   Future<void> _saveChanges() async {
@@ -138,27 +189,37 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
 
     setState(() => _isSaving = true);
     try {
-      // Update task details
-      await Supabase.instance.client.from('tasks').update({
+      // Update task details including status
+      final updatedData = {
         'title': _titleController.text.trim(),
         'description': _descriptionController.text.trim(),
         'priority': _selectedPriority,
+        'status': _selectedStatus, // Update task status in tasks table
         'created_at': _startDate!.toIso8601String(),
         'end_at': _endDate!.toIso8601String(),
-      }).eq('id', widget.task['id']);
+      };
 
-      // Update task assignment
-      await Supabase.instance.client.from('task_assignments').update({
-        'status': _selectedStatus,
-        'created_at': _startDate!.toIso8601String(),
-        'end_at': _endDate!.toIso8601String(),
-      }).eq('id', widget.assignment?['id']);
+      await Supabase.instance.client
+          .from('tasks')
+          .update(updatedData)
+          .eq('id', widget.task['id']);
+
+      // Update task assignment if it exists
+      if (widget.assignment != null) {
+        await Supabase.instance.client.from('task_assignments').update({
+          'status': _selectedStatus, // Keep assignment status in sync
+          'created_at': _startDate!.toIso8601String(),
+          'end_at': _endDate!.toIso8601String(),
+        }).eq('id', widget.assignment?['id']);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تم حفظ التغييرات بنجاح')),
         );
         setState(() => _isEditing = false);
+        // Refresh the task data
+        await _fetchTaskData();
       }
     } catch (e) {
       if (mounted) {
@@ -285,6 +346,33 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
     }
   }
 
+  // Add method to fetch complete task data including status
+  Future<void> _fetchTaskData() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('tasks')
+          .select('*')
+          .eq('id', widget.task['id'])
+          .single();
+
+      if (mounted && response != null) {
+        setState(() {
+          _taskData = response;
+          _selectedStatus = response['status'] ?? 'new';
+          _selectedPriority = response['priority'] ?? 'عادي';
+
+          // Update controllers with fresh data
+          if (!_isEditing) {
+            _titleController.text = response['title'] ?? '';
+            _descriptionController.text = response['description'] ?? '';
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching task data: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -293,16 +381,24 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
     // Get all assigned users
     final assignments = widget.task['task_assignments'] as List<dynamic>?;
 
+    // Use current task data or fallback to widget data with real-time updates
+    final currentTitle =
+        _taskData['title'] ?? widget.task['title'] ?? 'بدون عنوان';
+    final currentDescription =
+        _taskData['description'] ?? widget.task['description'];
+    final currentStatus = _taskData['status'] ?? widget.task['status'] ?? 'new';
+    final currentPriority =
+        _taskData['priority'] ?? widget.task['priority'] ?? 'عادي';
+
     return Scaffold(
       body: Form(
         key: _formKey,
         child: CustomScrollView(
           slivers: [
             SliverAppBar(
-              expandedHeight: 220, // Slightly increased height for more impact
+              expandedHeight: 220,
               pinned: true,
-              surfaceTintColor:
-                  colorScheme.surface, // To blend with the body on scroll
+              surfaceTintColor: colorScheme.surface,
               flexibleSpace: FlexibleSpaceBar(
                 background: Stack(
                   fit: StackFit.expand,
@@ -312,20 +408,65 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                       'assets/background.jpg',
                       fit: BoxFit.cover,
                     ),
-                    // Removed gradient overlay Container, only image is shown
+                    // Add status indicator overlay on the title
+                    Positioned(
+                      top: 80,
+                      right: 32,
+                      child: AnimatedContainer(
+                        duration:
+                            const Duration(milliseconds: 300), // Add animation
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color:
+                              _getStatusColor(currentStatus).withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _getStatusIcon(currentStatus),
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _getStatusText(currentStatus),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                     Align(
                       alignment: Alignment.centerRight,
                       child: Padding(
                         padding:
                             const EdgeInsets.only(right: 32.0, bottom: 24.0),
-                        child: Text(
-                          widget.task['title'] ?? 'بدون عنوان',
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          child: Text(
+                            currentTitle,
+                            key:
+                                ValueKey(currentTitle), // Add key for animation
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
@@ -377,9 +518,8 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
             ),
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.all(20), // Increased padding
+                padding: const EdgeInsets.all(20),
                 child: SingleChildScrollView(
-                  // <-- Added scroll view
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -389,17 +529,14 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                           controller: _titleController,
                           decoration: InputDecoration(
                             labelText: 'عنوان المهمة',
-                            filled: true, // Modern filled input
+                            filled: true,
                             fillColor:
                                 colorScheme.surfaceVariant.withOpacity(0.3),
                             border: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(12), // Rounded corners
-                              borderSide:
-                                  BorderSide.none, // No border when filled
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
                             ),
                             focusedBorder: OutlineInputBorder(
-                              // Focused state
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(
                                   color: colorScheme.primary, width: 2),
@@ -417,8 +554,18 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                         const SizedBox(height: 24),
                       ],
 
-                      // Status Card
-                      _buildStatusCard(context, theme, colorScheme),
+                      // Status Card - Always visible with current status (animated)
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: _buildStatusCard(context, theme, colorScheme),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Priority Display - Always visible (animated)
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: _buildPriorityCard(context, theme, colorScheme),
+                      ),
                       const SizedBox(height: 24),
 
                       // Priority Selection (only visible when editing)
@@ -433,7 +580,7 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                         const SizedBox(height: 24),
                       ],
 
-                      // Description Section
+                      // Description Section with real-time updates
                       Text(
                         'الوصف',
                         style: theme.textTheme.titleLarge
@@ -462,28 +609,29 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                           ),
                         )
                       else
-                        Container(
-                          width: double.infinity,
-                          padding:
-                              const EdgeInsets.all(20), // Increased padding
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceVariant
-                                .withOpacity(0.15), // Lighter background
-                            borderRadius:
-                                BorderRadius.circular(16), // More rounded
-                            border: Border.all(
-                                color: colorScheme.outlineVariant
-                                    .withOpacity(0.5)), // Subtle border
-                          ),
-                          child: Text(
-                            widget.task['description'] ??
-                                'لا يوجد وصف لهذه المهمة.',
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              color: colorScheme.onSurface.withOpacity(0.85),
-                              height: 1.5, // Better line height
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          child: Container(
+                            key: ValueKey(
+                                currentDescription), // Add key for animation
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color:
+                                  colorScheme.surfaceVariant.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                  color: colorScheme.outlineVariant
+                                      .withOpacity(0.5)),
                             ),
-                            textAlign: TextAlign
-                                .justify, // Justify text for better readability
+                            child: Text(
+                              currentDescription ?? 'لا يوجد وصف لهذه المهمة.',
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: colorScheme.onSurface.withOpacity(0.85),
+                                height: 1.5,
+                              ),
+                              textAlign: TextAlign.justify,
+                            ),
                           ),
                         ),
 
@@ -745,101 +893,104 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
   Widget _buildStatusCard(
       BuildContext context, ThemeData theme, ColorScheme colorScheme) {
     final statusColor = _getStatusColor(_selectedStatus);
-    return Card(
-      elevation: 6, // Increased elevation
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20), // More rounded corners
-      ),
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 24, // Increased padding
-          vertical: 20,
-        ),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              statusColor.withOpacity(
-                  0.9), // Slightly less opacity for the gradient effect
-              statusColor.withOpacity(0.6),
+    return AnimatedContainer(
+      key: ValueKey(_selectedStatus), // Add key for animation
+      duration: const Duration(milliseconds: 300),
+      child: Card(
+        elevation: 6,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 24, // Increased padding
+            vertical: 20,
+          ),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                statusColor.withOpacity(
+                    0.9), // Slightly less opacity for the gradient effect
+                statusColor.withOpacity(0.6),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: statusColor.withOpacity(0.4), // More pronounced shadow
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
             ],
           ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: statusColor.withOpacity(0.4), // More pronounced shadow
-              blurRadius: 12,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'حالة المهمة',
-              style: theme.textTheme.labelMedium?.copyWith(
-                // Smaller, clearer label
-                color: Colors.white.withOpacity(0.8),
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 10), // Spacing
-            Row(
-              children: [
-                Icon(
-                  _getStatusIcon(_selectedStatus),
-                  color: Colors.white,
-                  size: 32, // Larger icon
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'حالة المهمة',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  // Smaller, clearer label
+                  color: Colors.white.withOpacity(0.8),
+                  letterSpacing: 0.5,
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  // Use Expanded to handle long text or dropdowns
-                  child: _isEditing
-                      ? DropdownButtonHideUnderline(
-                          // Hide underline for cleaner look
-                          child: DropdownButton<String>(
-                            value: _selectedStatus,
-                            isExpanded: true, // Take full width
-                            icon: const Icon(Icons.arrow_drop_down_rounded,
-                                color: Colors.white70),
-                            style: theme.textTheme.titleLarge?.copyWith(
+              ),
+              const SizedBox(height: 10), // Spacing
+              Row(
+                children: [
+                  Icon(
+                    _getStatusIcon(_selectedStatus),
+                    color: Colors.white,
+                    size: 32, // Larger icon
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    // Use Expanded to handle long text or dropdowns
+                    child: _isEditing
+                        ? DropdownButtonHideUnderline(
+                            // Hide underline for cleaner look
+                            child: DropdownButton<String>(
+                              value: _selectedStatus,
+                              isExpanded: true, // Take full width
+                              icon: const Icon(Icons.arrow_drop_down_rounded,
+                                  color: Colors.white70),
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              dropdownColor: statusColor.withOpacity(
+                                  0.9), // Match dropdown color to card
+                              items:
+                                  ['new', 'pending', 'in_progress', 'completed']
+                                      .map((status) => DropdownMenuItem(
+                                            value: status,
+                                            child: Text(
+                                              _getStatusText(status),
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ))
+                                      .toList(),
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() => _selectedStatus = value);
+                                }
+                              },
+                            ),
+                          )
+                        : Text(
+                            _getStatusText(_selectedStatus),
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              // More prominent display text
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
                             ),
-                            dropdownColor: statusColor.withOpacity(
-                                0.9), // Match dropdown color to card
-                            items: ['new', 'in_progress', 'completed']
-                                .map((status) => DropdownMenuItem(
-                                      value: status,
-                                      child: Text(
-                                        _getStatusText(status),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ))
-                                .toList(),
-                            onChanged: (value) {
-                              if (value != null) {
-                                setState(() => _selectedStatus = value);
-                              }
-                            },
                           ),
-                        )
-                      : Text(
-                          _getStatusText(_selectedStatus),
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            // More prominent display text
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                ),
-              ],
-            ),
-          ],
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -890,6 +1041,79 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
               },
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPriorityCard(
+      BuildContext context, ThemeData theme, ColorScheme colorScheme) {
+    final currentPriority =
+        _taskData['priority'] ?? widget.task['priority'] ?? 'عادي';
+    final priorityColor = _getPriorityColor(currentPriority);
+
+    return AnimatedContainer(
+      key: ValueKey(currentPriority), // Add key for animation
+      duration: const Duration(milliseconds: 300),
+      child: Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                priorityColor.withOpacity(0.1),
+                priorityColor.withOpacity(0.05),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: priorityColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  _getPriorityIcon(currentPriority),
+                  color: priorityColor,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'الأولوية',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: colorScheme.onSurface.withOpacity(0.7),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      child: Text(
+                        currentPriority,
+                        key: ValueKey(currentPriority),
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: priorityColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1307,6 +1531,39 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
     );
   }
 
+  Future<void> _selectDate(BuildContext context, bool isStartDate) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: isStartDate
+          ? (_startDate ?? DateTime.now())
+          : (_endDate ?? _startDate ?? DateTime.now()),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+      locale: const Locale('ar'), // For Arabic date picker
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStartDate) {
+          _startDate = picked;
+          _startDateController.text = _formatArabicDate(picked);
+          // Ensure end date is not before start date
+          if (_endDate != null && _endDate!.isBefore(_startDate!)) {
+            _endDate = _startDate;
+            _endDateController.text = _formatArabicDate(_startDate!);
+          }
+        } else {
+          _endDate = picked;
+          _endDateController.text = _formatArabicDate(picked);
+          // Ensure start date is not after end date
+          if (_startDate != null && _startDate!.isAfter(_endDate!)) {
+            _startDate = _endDate;
+            _startDateController.text = _formatArabicDate(_endDate!);
+          }
+        }
+      });
+    }
+  }
+
   // Helper functions (unchanged functionally, but adjusted for consistency)
   String _formatArabicDate(dynamic dateString) {
     if (dateString == null || (dateString is String && dateString.isEmpty))
@@ -1355,33 +1612,39 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
   }
 
   String _getStatusText(String status) {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'completed':
         return 'تم التنفيذ';
       case 'in_progress':
         return 'قيد التنفيذ';
+      case 'pending':
+        return 'قيد الانتظار';
       default:
         return 'جديدة';
     }
   }
 
   Color _getStatusColor(String status) {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'completed':
         return Colors.green.shade600; // Deeper green
       case 'in_progress':
         return Colors.blue.shade600; // Deeper blue
+      case 'pending':
+        return Colors.orange.shade600; // Orange for pending
       default:
         return Colors.grey.shade600; // Deeper grey
     }
   }
 
   IconData _getStatusIcon(String status) {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'completed':
         return Icons.check_circle_rounded;
       case 'in_progress':
         return Icons.pending_actions_rounded; // More descriptive icon
+      case 'pending':
+        return Icons.schedule_rounded; // Clock icon for pending
       default:
         return Icons.fiber_new_rounded;
     }
@@ -1402,5 +1665,16 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
     final date = DateTime.parse(dateString).toLocal();
     return DateFormat('yyyy-MM-dd')
         .format(date); // Use intl for consistent formatting
+  }
+
+  IconData _getPriorityIcon(String priority) {
+    switch (priority) {
+      case 'عاجل':
+        return Icons.priority_high_rounded;
+      case 'هام':
+        return Icons.warning_rounded;
+      default:
+        return Icons.low_priority_rounded;
+    }
   }
 }

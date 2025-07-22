@@ -59,7 +59,7 @@ class _UserDashboardState extends State<UserDashboard>
     try {
       final userId = Supabase.instance.client.auth.currentUser!.id;
 
-      // Use DISTINCT to prevent duplicate tasks and group by task_id
+      // Updated query to include status from tasks table
       final response =
           await Supabase.instance.client.from('task_assignments').select('''
             id,
@@ -72,6 +72,7 @@ class _UserDashboardState extends State<UserDashboard>
               title,
               description,
               priority,
+              status,
               created_at,
               end_at,
               creator:profiles!created_by (
@@ -335,6 +336,59 @@ class _UserDashboardState extends State<UserDashboard>
     } catch (e) {
       if (mounted) {
         _showSnackBar('خطأ في فتح الملف: ${e.toString()}', isError: true);
+      }
+    }
+  }
+
+  Future<void> _updateTaskStatus(int assignmentId, String newStatus) async {
+    try {
+      setState(() => _isLoading = true);
+
+      // First, get the task_id from the assignment
+      final assignmentResponse = await Supabase.instance.client
+          .from('task_assignments')
+          .select('task_id')
+          .eq('id', assignmentId)
+          .single();
+
+      final taskId = assignmentResponse['task_id'];
+
+      // Update the task status in the tasks table
+      final response = await Supabase.instance.client
+          .from('tasks')
+          .update({'status': newStatus})
+          .eq('id', taskId)
+          .select();
+
+      if (response.isNotEmpty) {
+        // Update the local task list immediately for better UX
+        setState(() {
+          for (int i = 0; i < _tasks.length; i++) {
+            if (_tasks[i]['task']['id'] == taskId) {
+              _tasks[i]['task']['status'] = newStatus;
+              // Also update the assignment status for consistency
+              _tasks[i]['status'] = newStatus;
+              break;
+            }
+          }
+        });
+
+        if (mounted) {
+          _showSnackBar('تم تحديث حالة المهمة بنجاح', isError: false);
+        }
+      }
+
+      // Refresh tasks to ensure data consistency
+      await _fetchTasks();
+    } catch (e) {
+      debugPrint('Error updating task status: $e');
+      if (mounted) {
+        _showSnackBar('خطأ في تحديث حالة المهمة: ${e.toString()}',
+            isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -671,7 +725,8 @@ class _UserDashboardState extends State<UserDashboard>
     ThemeData theme,
   ) {
     final task = assignment['task'] as Map<String, dynamic>;
-    final status = assignment['status'] ?? 'new';
+    // Use status from tasks table instead of assignment status
+    final status = task['status'] ?? assignment['status'] ?? 'new';
     final statusColor = _getStatusColor(status);
     final creator = task['creator'] as Map<String, dynamic>;
     final priority = task['priority'] ?? 'عادي';
@@ -1013,6 +1068,8 @@ class _UserDashboardState extends State<UserDashboard>
     // Access task data from the assignment
     final task = assignment['task'] as Map<String, dynamic>;
     final taskId = task['id'];
+    // Use status from tasks table instead of assignment status
+    String currentStatus = task['status'] ?? assignment['status'] ?? 'pending';
 
     if (taskId != null) {
       _fetchTaskAttachments(taskId).then((_) {
@@ -1077,7 +1134,7 @@ class _UserDashboardState extends State<UserDashboard>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  task['title'] ?? r'مهمة بدون عنوان',
+                                  task['title'] ?? 'مهمة بدون عنوان',
                                   style:
                                       theme.textTheme.headlineSmall?.copyWith(
                                     fontWeight: FontWeight.bold,
@@ -1095,7 +1152,7 @@ class _UserDashboardState extends State<UserDashboard>
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
-                                    r'أولوية $priority',
+                                    'أولوية $priority',
                                     style: theme.textTheme.bodySmall?.copyWith(
                                       color: _getPriorityColor(priority),
                                       fontWeight: FontWeight.bold,
@@ -1109,11 +1166,80 @@ class _UserDashboardState extends State<UserDashboard>
                       ),
                       const SizedBox(height: 24),
 
+                      // Status Update Section
+                      Text(
+                        'حالة المهمة',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainer,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: colorScheme.outline.withOpacity(0.2),
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: currentStatus,
+                            isExpanded: true,
+                            items: [
+                              DropdownMenuItem(
+                                value: 'pending',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.pending_actions,
+                                        color: Colors.orange, size: 20),
+                                    const SizedBox(width: 8),
+                                    const Text('قيد الانتظار'),
+                                  ],
+                                ),
+                              ),
+                              DropdownMenuItem(
+                                value: 'in_progress',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.running_with_errors,
+                                        color: Colors.blue, size: 20),
+                                    const SizedBox(width: 8),
+                                    const Text('قيد التنفيذ'),
+                                  ],
+                                ),
+                              ),
+                              DropdownMenuItem(
+                                value: 'completed',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.task_alt,
+                                        color: Colors.green, size: 20),
+                                    const SizedBox(width: 8),
+                                    const Text('تم التنفيذ'),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            onChanged: (String? newValue) {
+                              if (newValue != null &&
+                                  newValue != currentStatus) {
+                                setModalState(() {
+                                  currentStatus = newValue;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
                       // Description
                       if (assignment['task']['description'] != null &&
                           assignment['task']['description'].isNotEmpty) ...[
                         Text(
-                          r'الوصف',
+                          'الوصف',
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -1138,7 +1264,7 @@ class _UserDashboardState extends State<UserDashboard>
 
                       // Attachments
                       Text(
-                        r'المرفقات',
+                        'المرفقات',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -1153,7 +1279,7 @@ class _UserDashboardState extends State<UserDashboard>
                             color: colorScheme.surfaceVariant,
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Text(r'لا توجد مرفقات'),
+                          child: const Text('لا توجد مرفقات'),
                         )
                       else
                         ListView.builder(
@@ -1185,22 +1311,51 @@ class _UserDashboardState extends State<UserDashboard>
                           Expanded(
                             child: OutlinedButton(
                               onPressed: () => Navigator.pop(context),
-                              child: const Text(r'إغلاق'),
+                              child: const Text('إغلاق'),
                             ),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
                             child: ElevatedButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                _showSnackBar(r'تم تحديث حالة المهمة',
-                                    isError: false);
-                              },
+                              onPressed: currentStatus ==
+                                      (task['status'] ?? assignment['status'])
+                                  ? null
+                                  : () async {
+                                      try {
+                                        // Show loading indicator
+                                        showDialog(
+                                          context: context,
+                                          barrierDismissible: false,
+                                          builder: (context) => const Center(
+                                            child: CircularProgressIndicator(),
+                                          ),
+                                        );
+
+                                        await _updateTaskStatus(
+                                            assignment['id'], currentStatus);
+
+                                        // Close loading dialog
+                                        Navigator.pop(context);
+                                        // Close modal
+                                        Navigator.pop(context);
+                                      } catch (e) {
+                                        // Close loading dialog
+                                        Navigator.pop(context);
+                                        _showSnackBar(
+                                            'خطأ في حفظ التغييرات: ${e.toString()}',
+                                            isError: true);
+                                      }
+                                    },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: colorScheme.primary,
                                 foregroundColor: colorScheme.onPrimary,
                               ),
-                              child: const Text(r'تحديث الحالة'),
+                              child: Text(
+                                currentStatus ==
+                                        (task['status'] ?? assignment['status'])
+                                    ? 'لا توجد تغييرات'
+                                    : 'حفظ التغييرات',
+                              ),
                             ),
                           ),
                         ],
