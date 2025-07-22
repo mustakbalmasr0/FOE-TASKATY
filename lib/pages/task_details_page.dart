@@ -35,6 +35,7 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
   List<Map<String, dynamic>> _attachments = [];
   Map<String, dynamic> _taskData = {}; // Add this to store updated task data
   late RealtimeChannel _taskChannel; // Add this for real-time updates
+  List<Map<String, dynamic>> _userNotes = [];
 
   @override
   void initState() {
@@ -52,6 +53,7 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
     _initializeControllers();
     _loadAttachments();
     _fetchTaskData(); // Fetch complete task data including status
+    _fetchUserNotes(); // Add this
     _setupRealtimeListener(); // Add real-time listener
   }
 
@@ -152,6 +154,44 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                     duration: const Duration(seconds: 2),
                     behavior: SnackBarBehavior.floating,
                     backgroundColor: Colors.blue.shade600,
+                  ),
+                );
+              }
+            }
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'task_assignments',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'task_id',
+            value: widget.task['id'],
+          ),
+          callback: (payload) {
+            if (mounted) {
+              // Refresh user notes when assignments are updated
+              _fetchUserNotes();
+
+              // Show notification for new user notes
+              final newNote = payload.newRecord['user_note'];
+              final oldNote = payload.oldRecord?['user_note'];
+
+              if (newNote != null && newNote != oldNote && newNote.isNotEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text('تم إضافة ملاحظة جديدة من المستخدم'),
+                    duration: const Duration(seconds: 3),
+                    behavior: SnackBarBehavior.floating,
+                    backgroundColor: Colors.blue.shade600,
+                    action: SnackBarAction(
+                      label: 'عرض',
+                      textColor: Colors.white,
+                      onPressed: () {
+                        // Scroll to user notes section if needed
+                      },
+                    ),
                   ),
                 );
               }
@@ -370,6 +410,35 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
       }
     } catch (e) {
       debugPrint('Error fetching task data: $e');
+    }
+  }
+
+  // Add method to fetch user notes for this task
+  Future<void> _fetchUserNotes() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('task_assignments')
+          .select('''
+            id,
+            user_note,
+            updated_at,
+            assignee:profiles!user_id (
+              name,
+              avatar_url
+            )
+          ''')
+          .eq('task_id', widget.task['id'])
+          .not('user_note', 'is', null)
+          .neq('user_note', '')
+          .order('updated_at', ascending: false);
+
+      if (mounted) {
+        setState(() {
+          _userNotes = List<Map<String, dynamic>>.from(response);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching user notes: $e');
     }
   }
 
@@ -639,6 +708,11 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
 
                       // Attachments Section
                       _buildAttachmentsList(context, theme, colorScheme),
+
+                      const SizedBox(height: 32),
+
+                      // User Notes Section - Add this before Assignment Info
+                      _buildUserNotesSection(context, theme, colorScheme),
 
                       const SizedBox(height: 32),
 
@@ -1676,5 +1750,215 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
       default:
         return Icons.low_priority_rounded;
     }
+  }
+
+  // Add method to build user notes section for admins
+  Widget _buildUserNotesSection(
+      BuildContext context, ThemeData theme, ColorScheme colorScheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.chat_bubble_outline_rounded,
+              color: colorScheme.secondary,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'ملاحظات المستخدمين',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: colorScheme.secondary,
+              ),
+            ),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: colorScheme.secondary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${_userNotes.length}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.secondary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (_userNotes.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  colorScheme.surfaceVariant.withOpacity(0.3),
+                  colorScheme.surfaceVariant.withOpacity(0.1),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: colorScheme.outline.withOpacity(0.2),
+              ),
+            ),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.chat_outlined,
+                  size: 48,
+                  color: colorScheme.onSurface.withOpacity(0.4),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'لا توجد ملاحظات من المستخدمين',
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'ستظهر ملاحظات واستفسارات المستخدمين هنا',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.5),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _userNotes.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final noteData = _userNotes[index];
+              final assignee = noteData['assignee'] as Map<String, dynamic>?;
+              final userName = assignee?['name'] ?? 'مستخدم غير معروف';
+              final userAvatar = assignee?['avatar_url'];
+              final note = noteData['user_note'] ?? '';
+              final updatedAt = noteData['updated_at'];
+
+              return AnimatedContainer(
+                duration: Duration(milliseconds: 300 + (index * 100)),
+                child: Card(
+                  elevation: 3,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topRight,
+                        end: Alignment.bottomLeft,
+                        colors: [
+                          colorScheme.secondaryContainer.withOpacity(0.1),
+                          colorScheme.secondaryContainer.withOpacity(0.05),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: colorScheme.secondary.withOpacity(0.2),
+                        width: 1,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 20,
+                                backgroundColor:
+                                    colorScheme.secondary.withOpacity(0.2),
+                                backgroundImage: userAvatar != null
+                                    ? NetworkImage(userAvatar)
+                                    : null,
+                                child: userAvatar == null
+                                    ? Text(
+                                        userName.isNotEmpty
+                                            ? userName[0].toUpperCase()
+                                            : 'M',
+                                        style: theme.textTheme.titleMedium
+                                            ?.copyWith(
+                                          color: colorScheme.secondary,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      userName,
+                                      style:
+                                          theme.textTheme.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.secondary,
+                                      ),
+                                    ),
+                                    if (updatedAt != null)
+                                      Text(
+                                        _formatArabicDate(updatedAt),
+                                        style:
+                                            theme.textTheme.bodySmall?.copyWith(
+                                          color: colorScheme.onSurface
+                                              .withOpacity(0.6),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.chat_bubble_rounded,
+                                color: colorScheme.secondary.withOpacity(0.6),
+                                size: 20,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: colorScheme.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: colorScheme.outline.withOpacity(0.1),
+                              ),
+                            ),
+                            child: Text(
+                              note,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                height: 1.5,
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
   }
 }

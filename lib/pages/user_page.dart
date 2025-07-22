@@ -26,6 +26,9 @@ class _UserDashboardState extends State<UserDashboard>
     'تم التفيذ'
   ];
 
+  final TextEditingController _noteController = TextEditingController();
+  bool _isSavingNote = false;
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +53,7 @@ class _UserDashboardState extends State<UserDashboard>
   @override
   void dispose() {
     _animationController.dispose();
+    _noteController.dispose();
     super.dispose();
   }
 
@@ -389,6 +393,46 @@ class _UserDashboardState extends State<UserDashboard>
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  // Add method to fetch user note for a specific assignment
+  Future<String> _fetchUserNote(int assignmentId) async {
+    try {
+      final response = await Supabase.instance.client
+          .from('task_assignments')
+          .select('user_note')
+          .eq('id', assignmentId)
+          .single();
+
+      return response['user_note'] ?? '';
+    } catch (e) {
+      debugPrint('Error fetching user note: $e');
+      return '';
+    }
+  }
+
+  // Add method to update user note
+  Future<void> _updateUserNote(int assignmentId, String note) async {
+    try {
+      setState(() => _isSavingNote = true);
+
+      await Supabase.instance.client
+          .from('task_assignments')
+          .update({'user_note': note.trim()}).eq('id', assignmentId);
+
+      if (mounted) {
+        _showSnackBar('تم حفظ الملاحظة بنجاح', isError: false);
+      }
+    } catch (e) {
+      debugPrint('Error updating user note: $e');
+      if (mounted) {
+        _showSnackBar('خطأ في حفظ الملاحظة: ${e.toString()}', isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSavingNote = false);
       }
     }
   }
@@ -1062,18 +1106,25 @@ class _UserDashboardState extends State<UserDashboard>
     ColorScheme colorScheme,
     ThemeData theme,
   ) {
-    // Clear previous attachments
+    // Clear previous attachments and notes
     setState(() => _taskAttachments.clear());
+    _noteController.clear();
 
     // Access task data from the assignment
     final task = assignment['task'] as Map<String, dynamic>;
     final taskId = task['id'];
-    // Use status from tasks table instead of assignment status
     String currentStatus = task['status'] ?? assignment['status'] ?? 'pending';
 
     if (taskId != null) {
-      _fetchTaskAttachments(taskId).then((_) {
+      // Fetch both attachments and user note
+      Future.wait([
+        _fetchTaskAttachments(taskId),
+        _fetchUserNote(assignment['id']),
+      ]).then((results) {
         if (!mounted) return;
+
+        final userNote = results[1] as String;
+        _noteController.text = userNote;
 
         showModalBottomSheet(
           context: context,
@@ -1305,6 +1356,12 @@ class _UserDashboardState extends State<UserDashboard>
 
                       const SizedBox(height: 24),
 
+                      // User Notes Section - Add this after attachments
+                      _buildUserNotesSection(
+                          assignment['id'], colorScheme, theme, setModalState),
+
+                      const SizedBox(height: 24),
+
                       // Action buttons
                       Row(
                         children: [
@@ -1322,7 +1379,6 @@ class _UserDashboardState extends State<UserDashboard>
                                   ? null
                                   : () async {
                                       try {
-                                        // Show loading indicator
                                         showDialog(
                                           context: context,
                                           barrierDismissible: false,
@@ -1334,12 +1390,9 @@ class _UserDashboardState extends State<UserDashboard>
                                         await _updateTaskStatus(
                                             assignment['id'], currentStatus);
 
-                                        // Close loading dialog
                                         Navigator.pop(context);
-                                        // Close modal
                                         Navigator.pop(context);
                                       } catch (e) {
-                                        // Close loading dialog
                                         Navigator.pop(context);
                                         _showSnackBar(
                                             'خطأ في حفظ التغييرات: ${e.toString()}',
@@ -1369,5 +1422,173 @@ class _UserDashboardState extends State<UserDashboard>
         );
       });
     }
+  }
+
+  // Add method to build user notes section
+  Widget _buildUserNotesSection(
+    int assignmentId,
+    ColorScheme colorScheme,
+    ThemeData theme,
+    StateSetter setModalState,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.note_add_rounded,
+              color: colorScheme.primary,
+              size: 24,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'ملاحظات للمدير',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: colorScheme.primary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                colorScheme.primaryContainer.withOpacity(0.1),
+                colorScheme.primaryContainer.withOpacity(0.05),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: colorScheme.primary.withOpacity(0.2),
+              width: 1,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'اضف ملاحظاتك أو استفساراتك للمدير هنا',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.7),
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _noteController,
+                  maxLines: 4,
+                  minLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'اكتب ملاحظاتك هنا...',
+                    filled: true,
+                    fillColor: colorScheme.surface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: colorScheme.outline.withOpacity(0.3),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: colorScheme.primary,
+                        width: 2,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: colorScheme.outline.withOpacity(0.3),
+                      ),
+                    ),
+                    prefixIcon: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Icon(
+                        Icons.edit_note_rounded,
+                        color: colorScheme.primary,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isSavingNote
+                        ? null
+                        : () async {
+                            await _updateUserNote(
+                                assignmentId, _noteController.text);
+                            setModalState(() {}); // Update modal state
+                          },
+                    icon: _isSavingNote
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colorScheme.onPrimary,
+                            ),
+                          )
+                        : const Icon(Icons.save_rounded),
+                    label:
+                        Text(_isSavingNote ? 'جاري الحفظ...' : 'حفظ الملاحظة'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colorScheme.primary,
+                      foregroundColor: colorScheme.onPrimary,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                if (_noteController.text.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceVariant.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: colorScheme.outline.withOpacity(0.2),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline_rounded,
+                          color: colorScheme.primary,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'ستكون ملاحظاتك مرئية للمدير في تفاصيل المهمة',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
