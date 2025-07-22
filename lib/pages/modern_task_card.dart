@@ -27,7 +27,9 @@ class ModernTaskCard extends StatelessWidget {
         assignments?.isNotEmpty == true ? assignments?.elementAt(0) : null;
     final assigneeProfile = assignment?['assignee_profile'];
     final creatorProfile = task['creator_profile'];
-    final status = assignment?['status'] ?? 'new';
+
+    // Use status from tasks table instead of assignment
+    final status = task['status'] ?? 'new'; // Get status directly from task
     final statusColor = _getStatusColor(status);
     final statusText = _getStatusText(status);
 
@@ -208,28 +210,54 @@ class ModernTaskCard extends StatelessWidget {
                                         ? SizedBox(
                                             height: 56,
                                             child: ListView.builder(
-                                              itemCount: uniqueAssigneesList.length,
+                                              itemCount:
+                                                  uniqueAssigneesList.length,
                                               itemBuilder: (context, idx) {
-                                                final assignee = uniqueAssigneesList[idx];
-                                                final name = assignee['name']?.toString() ?? 'غير محدد';
-                                                final avatarUrl = assignee['avatar_url']?.toString();
-                                                
+                                                final assignee =
+                                                    uniqueAssigneesList[idx];
+                                                final name = assignee['name']
+                                                        ?.toString() ??
+                                                    'غير محدد';
+                                                final avatarUrl =
+                                                    assignee['avatar_url']
+                                                        ?.toString();
+
                                                 return Padding(
-                                                  padding: const EdgeInsets.only(bottom: 8.0),
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          bottom: 8.0),
                                                   child: Row(
                                                     children: [
                                                       CircleAvatar(
                                                         radius: 16,
-                                                        backgroundColor: colorScheme.primaryContainer.withOpacity(0.7),
-                                                        backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
-                                                            ? NetworkImage(avatarUrl)
-                                                            : null,
-                                                        child: avatarUrl == null || avatarUrl.isEmpty
+                                                        backgroundColor:
+                                                            colorScheme
+                                                                .primaryContainer
+                                                                .withOpacity(
+                                                                    0.7),
+                                                        backgroundImage:
+                                                            avatarUrl != null &&
+                                                                    avatarUrl
+                                                                        .isNotEmpty
+                                                                ? NetworkImage(
+                                                                    avatarUrl)
+                                                                : null,
+                                                        child: avatarUrl ==
+                                                                    null ||
+                                                                avatarUrl
+                                                                    .isEmpty
                                                             ? Text(
-                                                                name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                                                style: TextStyle(
-                                                                  color: colorScheme.onPrimaryContainer,
-                                                                  fontWeight: FontWeight.bold,
+                                                                name.isNotEmpty
+                                                                    ? name[0]
+                                                                        .toUpperCase()
+                                                                    : '?',
+                                                                style:
+                                                                    TextStyle(
+                                                                  color: colorScheme
+                                                                      .onPrimaryContainer,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
                                                                   fontSize: 12,
                                                                 ),
                                                               )
@@ -239,12 +267,17 @@ class ModernTaskCard extends StatelessWidget {
                                                       Expanded(
                                                         child: Text(
                                                           name,
-                                                          style: theme.textTheme.bodySmall?.copyWith(
-                                                            fontWeight: FontWeight.w500,
-                                                            color: colorScheme.onSurface,
+                                                          style: theme.textTheme
+                                                              .bodySmall
+                                                              ?.copyWith(
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                            color: colorScheme
+                                                                .onSurface,
                                                           ),
                                                           maxLines: 1,
-                                                          overflow: TextOverflow.ellipsis,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
                                                         ),
                                                       ),
                                                     ],
@@ -257,20 +290,44 @@ class ModernTaskCard extends StatelessWidget {
                                             children: [
                                               CircleAvatar(
                                                 radius: 16,
-                                                backgroundColor: colorScheme.primaryContainer.withOpacity(0.7),
-                                                backgroundImage: uniqueAssigneesList[0]['avatar_url'] != null &&
-                                                        uniqueAssigneesList[0]['avatar_url'].toString().isNotEmpty
-                                                    ? NetworkImage(uniqueAssigneesList[0]['avatar_url'])
+                                                backgroundColor: colorScheme
+                                                    .primaryContainer
+                                                    .withOpacity(0.7),
+                                                backgroundImage: uniqueAssigneesList[
+                                                                    0][
+                                                                'avatar_url'] !=
+                                                            null &&
+                                                        uniqueAssigneesList[0]
+                                                                ['avatar_url']
+                                                            .toString()
+                                                            .isNotEmpty
+                                                    ? NetworkImage(
+                                                        uniqueAssigneesList[0]
+                                                            ['avatar_url'])
                                                     : null,
-                                                child: uniqueAssigneesList[0]['avatar_url'] == null ||
-                                                        uniqueAssigneesList[0]['avatar_url'].toString().isEmpty
+                                                child: uniqueAssigneesList[0][
+                                                                'avatar_url'] ==
+                                                            null ||
+                                                        uniqueAssigneesList[0]
+                                                                ['avatar_url']
+                                                            .toString()
+                                                            .isEmpty
                                                     ? Text(
-                                                        (uniqueAssigneesList[0]['name']?.toString().isNotEmpty ?? false)
-                                                            ? uniqueAssigneesList[0]['name'].toString()[0].toUpperCase()
+                                                        (uniqueAssigneesList[0]
+                                                                        ['name']
+                                                                    ?.toString()
+                                                                    .isNotEmpty ??
+                                                                false)
+                                                            ? uniqueAssigneesList[
+                                                                    0]['name']
+                                                                .toString()[0]
+                                                                .toUpperCase()
                                                             : '?',
                                                         style: TextStyle(
-                                                          color: colorScheme.onPrimaryContainer,
-                                                          fontWeight: FontWeight.bold,
+                                                          color: colorScheme
+                                                              .onPrimaryContainer,
+                                                          fontWeight:
+                                                              FontWeight.bold,
                                                           fontSize: 12,
                                                         ),
                                                       )
@@ -279,13 +336,19 @@ class ModernTaskCard extends StatelessWidget {
                                               const SizedBox(width: 8),
                                               Expanded(
                                                 child: Text(
-                                                  uniqueAssigneesList[0]['name']?.toString() ?? 'غير محدد',
-                                                  style: theme.textTheme.bodySmall?.copyWith(
+                                                  uniqueAssigneesList[0]['name']
+                                                          ?.toString() ??
+                                                      'غير محدد',
+                                                  style: theme
+                                                      .textTheme.bodySmall
+                                                      ?.copyWith(
                                                     fontWeight: FontWeight.w500,
-                                                    color: colorScheme.onSurface,
+                                                    color:
+                                                        colorScheme.onSurface,
                                                   ),
                                                   maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
                                               ),
                                             ],
@@ -293,8 +356,10 @@ class ModernTaskCard extends StatelessWidget {
                                   else
                                     Text(
                                       'غير محدد',
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.onSurface.withOpacity(0.7),
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
+                                        color: colorScheme.onSurface
+                                            .withOpacity(0.7),
                                       ),
                                     ),
                                 ],
@@ -483,22 +548,26 @@ class ModernTaskCard extends StatelessWidget {
   }
 
   String _getStatusText(String status) {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'completed':
         return 'تم التنفيذ';
       case 'in_progress':
         return 'قيد التنفيذ';
+      case 'pending':
+        return 'قيد الانتظار';
       default:
         return 'جديدة';
     }
   }
 
   Color _getStatusColor(String status) {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'completed':
         return const Color(0xFF4CAF50);
       case 'in_progress':
         return const Color(0xFF2196F3);
+      case 'pending':
+        return const Color(0xFFFF9800);
       default:
         return const Color(0xFF9E9E9E);
     }
@@ -622,4 +691,3 @@ class ModernTaskCard extends StatelessWidget {
     );
   }
 }
-                

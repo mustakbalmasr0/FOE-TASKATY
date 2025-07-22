@@ -60,11 +60,9 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
   void _initializeControllers() {
     _titleController.text = widget.task['title'] ?? '';
     _descriptionController.text = widget.task['description'] ?? '';
-    // Use task status from tasks table instead of assignment status
-    _selectedStatus = _taskData['status'] ??
-        widget.task['status'] ??
-        widget.assignment?['status'] ??
-        'new';
+
+    // Use task status from tasks table as primary source
+    _selectedStatus = _taskData['status'] ?? widget.task['status'] ?? 'new';
     _selectedPriority = widget.task['priority'] ?? 'عادي';
 
     // Safely parse dates, fallback to now if null or invalid
@@ -229,12 +227,12 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
 
     setState(() => _isSaving = true);
     try {
-      // Update task details including status
+      // Update task details including status in tasks table
       final updatedData = {
         'title': _titleController.text.trim(),
         'description': _descriptionController.text.trim(),
         'priority': _selectedPriority,
-        'status': _selectedStatus, // Update task status in tasks table
+        'status': _selectedStatus, // Primary status in tasks table
         'created_at': _startDate!.toIso8601String(),
         'end_at': _endDate!.toIso8601String(),
       };
@@ -244,14 +242,10 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
           .update(updatedData)
           .eq('id', widget.task['id']);
 
-      // Update task assignment if it exists
-      if (widget.assignment != null) {
-        await Supabase.instance.client.from('task_assignments').update({
-          'status': _selectedStatus, // Keep assignment status in sync
-          'created_at': _startDate!.toIso8601String(),
-          'end_at': _endDate!.toIso8601String(),
-        }).eq('id', widget.assignment?['id']);
-      }
+      // Keep task assignments status in sync
+      await Supabase.instance.client
+          .from('task_assignments')
+          .update({'status': _selectedStatus}).eq('task_id', widget.task['id']);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
