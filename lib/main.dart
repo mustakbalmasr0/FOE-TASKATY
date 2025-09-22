@@ -7,7 +7,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:taskaty/router/auth_router.dart';
 import 'package:taskaty/pages/dashboard.dart';
 import 'package:taskaty/pages/admin_page.dart';
-import 'package:taskaty/pages/user_page.dart';
+import 'package:taskaty/pages/user_Dashboard.dart';
 import 'package:taskaty/auth/login.dart';
 
 // Conditional imports for Firebase (only on mobile)
@@ -65,8 +65,8 @@ void main() async {
     final session = data.session;
     print('Auth state changed: ${data.event}');
 
-    if (session != null && session.user != null) {
-      print('User signed in: ${session.user.id}');
+    if (session?.user?.id != null) {
+      print('User signed in: ${session!.user!.id}');
 
       // Wait a moment to ensure FCM token is available
       await Future.delayed(Duration(milliseconds: 500));
@@ -74,8 +74,8 @@ void main() async {
       // Check and ensure FCM token exists for the user
       if (!kIsWeb) {
         try {
-          await NotificationService.checkAndEnsureFCMToken(session.user.id);
-          print('FCM token checked and ensured for user: ${session.user.id}');
+          await NotificationService.checkAndEnsureFCMToken(session.user!.id);
+          print('FCM token checked and ensured for user: ${session.user!.id}');
         } catch (e) {
           print('Failed to check/ensure FCM token: $e');
         }
@@ -98,7 +98,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       // Firebase might already be initialized, which is fine
       print('Firebase already initialized in background handler');
     }
-    print('Handling a background message: ${message.messageId}');
+    print('Handling a background message: ${message.messageId ?? "unknown"}');
   }
 }
 
@@ -191,7 +191,11 @@ class FCMTokenNavigatorObserver extends NavigatorObserver {
         routeName == '/admin/create-task' ||
         routeName == '/user/dashboard') {
       if (!kIsWeb) {
-        NotificationService.getAndSaveFCMToken();
+        try {
+          NotificationService.getAndSaveFCMToken();
+        } catch (e) {
+          print('Failed to get and save FCM token: $e');
+        }
       }
     }
     super.didPush(route, previousRoute);

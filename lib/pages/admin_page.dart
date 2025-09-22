@@ -34,8 +34,8 @@ class _AdminDashboardState extends State<AdminDashboard>
   DateTime? _endDate;
   String _selectedPriority = 'عادي';
   final List<String> _priorities = ['هام للغاية', 'هام جدا', 'هام', 'عادي'];
-  String _selectedStatus = 'new';
-  final List<String> _statuses = ['new', 'in_progress', 'completed'];
+  String _selectedStatus = 'in_progress';
+  final List<String> _statuses = ['in_progress', 'completed'];
 
   @override
   void initState() {
@@ -204,6 +204,9 @@ class _AdminDashboardState extends State<AdminDashboard>
 
       // Send notifications to assigned users using Edge Function
       for (String userId in uniqueUserIds) {
+        // Skip sending notification to admin (should not be in uniqueUserIds, but double-check)
+        if (userId == adminUserId) continue;
+
         // Get user details for notification
         final userDetails = _users.firstWhere(
           (u) => u['id'].toString() == userId,
@@ -278,7 +281,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       _startDate = null;
       _endDate = null;
       _selectedPriority = 'عادي';
-      _selectedStatus = 'new';
+      _selectedStatus = 'in_progress';
       _selectedFiles.clear();
     });
   }
@@ -368,7 +371,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       case 'in_progress':
         return 'قيد التنفيذ';
       default:
-        return 'جديدة';
+        return 'قيد التنفيذ';
     }
   }
 

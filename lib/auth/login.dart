@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:taskaty/auth/signup.dart'; // Assuming this path is correct
 import 'package:taskaty/pages/dashboard.dart'; // Assuming this path is correct
-import 'package:taskaty/pages/user_page.dart'; // Assuming this path is correct
+import 'package:taskaty/pages/user_Dashboard.dart'; // Fixed import path
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'dart:ui'; // For ImageFilter.blur, if you decide to re-introduce it subtly
@@ -818,71 +818,70 @@ class _LoginScreenState extends State<LoginScreen>
 }
 
 // Here there is a fcm_token didn't saved in the database
-                
-  Widget _buildModernTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    bool obscureText = false,
-    TextInputType keyboardType = TextInputType.text,
-    Widget? suffixIcon,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obscureText,
-      keyboardType: keyboardType,
-      textDirection: TextDirection.rtl,
-      style: const TextStyle(color: Colors.black),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.black),
-        prefixIcon: Icon(
-          icon,
-          color: Colors.grey,
-        ),
-        suffixIcon: suffixIcon,
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.0),
-          borderSide: const BorderSide(color: Colors.grey),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.0),
-          borderSide: const BorderSide(color: Colors.grey),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.0),
-          borderSide: const BorderSide(color: Colors.blue),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.0),
-          borderSide: BorderSide(
-            color: Colors.red.withOpacity(0.6),
-            width: 2,
-          ),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.0),
-          borderSide: BorderSide(
-            color: Colors.red.withOpacity(0.8),
-            width: 2,
-          ),
-        ),
-        errorStyle: GoogleFonts.cairo(
-          color: Colors.red.shade700,
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
+
+Widget _buildModernTextField({
+  required TextEditingController controller,
+  required String label,
+  required IconData icon,
+  bool obscureText = false,
+  TextInputType keyboardType = TextInputType.text,
+  Widget? suffixIcon,
+  String? Function(String?)? validator,
+}) {
+  return TextFormField(
+    controller: controller,
+    obscureText: obscureText,
+    keyboardType: keyboardType,
+    textDirection: TextDirection.rtl,
+    style: const TextStyle(color: Colors.black),
+    decoration: InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.black),
+      prefixIcon: Icon(
+        icon,
+        color: Colors.grey,
+      ),
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8.0),
+        borderSide: const BorderSide(color: Colors.grey),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8.0),
+        borderSide: const BorderSide(color: Colors.grey),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8.0),
+        borderSide: const BorderSide(color: Colors.blue),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8.0),
+        borderSide: BorderSide(
+          color: Colors.red.withOpacity(0.6),
+          width: 2,
         ),
       ),
-      validator: validator,
-    );
-  }
-
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8.0),
+        borderSide: BorderSide(
+          color: Colors.red.withOpacity(0.8),
+          width: 2,
+        ),
+      ),
+      errorStyle: GoogleFonts.cairo(
+        color: Colors.red.shade700,
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+      ),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 16,
+      ),
+    ),
+    validator: validator,
+  );
+}
 
 // Here there is a fcm_token didn't saved in the database

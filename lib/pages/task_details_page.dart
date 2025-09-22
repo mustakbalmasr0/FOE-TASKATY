@@ -36,6 +36,8 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
   Map<String, dynamic> _taskData = {}; // Add this to store updated task data
   late RealtimeChannel _taskChannel; // Add this for real-time updates
   List<Map<String, dynamic>> _userNotes = [];
+  List<Map<String, dynamic>> _allUsers = []; // Add this for user selection
+  List<String> _currentAssignedUserIds = []; // Track current assignments
 
   @override
   void initState() {
@@ -55,6 +57,8 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
     _fetchTaskData(); // Fetch complete task data including status
     _fetchUserNotes(); // Add this
     _setupRealtimeListener(); // Add real-time listener
+    _fetchAllUsers(); // Add this
+    _loadCurrentAssignments(); // Add this
   }
 
   void _initializeControllers() {
@@ -380,7 +384,7 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
     }
   }
 
-  // Add method to fetch complete task data including status
+  // Add method to fetch complete task data
   Future<void> _fetchTaskData() async {
     try {
       final response = await Supabase.instance.client
@@ -433,6 +437,145 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
       }
     } catch (e) {
       debugPrint('Error fetching user notes: $e');
+    }
+  }
+
+  // Add method to fetch all available users
+  Future<void> _fetchAllUsers() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('profiles')
+          .select('id, name, avatar_url, role')
+          .eq('role', 'user');
+
+      if (mounted) {
+        setState(() {
+          _allUsers = List<Map<String, dynamic>>.from(response);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching users: $e');
+    }
+  }
+
+  // Add method to load current assignments
+  Future<void> _loadCurrentAssignments() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('task_assignments')
+          .select('user_id')
+          .eq('task_id', widget.task['id']);
+
+      if (mounted) {
+        setState(() {
+          _currentAssignedUserIds = response
+              .map((assignment) => assignment['user_id'].toString())
+              .toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading current assignments: $e');
+    }
+  }
+
+  // Add method to show user assignment dialog
+  Future<void> _showUserAssignmentDialog() async {
+    List<String> selectedUserIds = List.from(_currentAssignedUserIds);
+
+    final result = await showDialog<List<String>>(
+      context: context,
+      builder: (context) => _UserAssignmentDialog(
+        allUsers: _allUsers,
+        currentAssignedUserIds: selectedUserIds,
+      ),
+    );
+
+    if (result != null) {
+      await _updateTaskAssignments(result);
+    }
+  }
+
+  // Add method to update task assignments
+  Future<void> _updateTaskAssignments(List<String> newUserIds) async {
+    try {
+      final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+      
+      // Remove admin from assignments if accidentally included
+      newUserIds.removeWhere((id) => id == currentUserId);
+
+      // Get users to remove (in current but not in new)
+      final usersToRemove = _currentAssignedUserIds
+          .where((id) => !newUserIds.contains(id))
+          .toList();
+
+      // Get users to add (in new but not in current)
+      final usersToAdd = newUserIds
+          .where((id) => !_currentAssignedUserIds.contains(id))
+          .toList();
+
+      // Remove unassigned users
+      if (usersToRemove.isNotEmpty) {
+        await Supabase.instance.client
+            .from('task_assignments')
+            .delete()
+            .eq('task_id', widget.task['id'])
+            .inFilter('user_id', usersToRemove);
+      }
+
+      // Add new assigned users
+      if (usersToAdd.isNotEmpty) {
+        final assignmentInserts = usersToAdd.map((userId) => {
+              'task_id': widget.task['id'],
+              'user_id': userId,
+              'created_at': _startDate?.toIso8601String() ?? 
+                           widget.task['created_at'],
+              'end_at': _endDate?.toIso8601String() ?? 
+                        widget.task['end_at'],
+              'status': _selectedStatus,
+            }).toList();
+
+        await Supabase.instance.client
+            .from('task_assignments')
+            .insert(assignmentInserts);
+
+        // Send notifications to newly assigned users
+        for (String userId in usersToAdd) {
+          try {
+            await Supabase.instance.client.functions.invoke(
+              'notify-task-assignment',
+              body: {
+                'task_id': widget.task['id'],
+                'user_id': userId,
+                'assigned_by_id': currentUserId,
+                'type': 'task_assigned',
+                'task_title': _titleController.text.trim(),
+              },
+            );
+          } catch (e) {
+            debugPrint('Failed to send notification to user $userId: $e');
+          }
+        }
+      }
+
+      // Update local state
+      setState(() {
+        _currentAssignedUserIds = List.from(newUserIds);
+      });
+
+      // Refresh task data
+      await _fetchTaskData();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم تحديث تعيينات المهمة بنجاح')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في تحديث التعيينات: ${e.toString()}')),
+        );
+      }
     }
   }
 
@@ -809,7 +952,6 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                               ),
                               child: Padding(
                                 padding: const EdgeInsets.all(8.0),
-                                // --- Show all assigned users vertically here ---
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -825,6 +967,24 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                                               ?.copyWith(
                                                   fontWeight: FontWeight.bold),
                                         ),
+                                        const Spacer(),
+                                        // Add edit button when editing
+                                        if (_isEditing)
+                                          IconButton(
+                                            icon: Icon(
+                                              Icons.edit_rounded,
+                                              color: colorScheme.secondary,
+                                              size: 20,
+                                            ),
+                                            onPressed: _showUserAssignmentDialog,
+                                            tooltip: 'تعديل التعيينات',
+                                            style: IconButton.styleFrom(
+                                              backgroundColor: colorScheme
+                                                  .secondary
+                                                  .withOpacity(0.1),
+                                              padding: const EdgeInsets.all(8),
+                                            ),
+                                          ),
                                       ],
                                     ),
                                     const SizedBox(height: 16),
@@ -1096,7 +1256,7 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                 prefixIcon: Icon(Icons.priority_high_rounded,
                     color: _getPriorityColor(_selectedPriority)),
               ),
-              items: ['عادي', 'هام', 'عاجل']
+              items: ['هام للغاية', 'هام جدا', 'هام', 'عادي']
                   .map((priority) => DropdownMenuItem(
                         value: priority,
                         child: Text(priority, style: theme.textTheme.bodyLarge),
@@ -1720,12 +1880,16 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
 
   Color _getPriorityColor(String priority) {
     switch (priority) {
-      case 'عاجل':
-        return Colors.red.shade700; // Stronger red
+      case 'هام للغاية':
+        return Colors.red.shade700;
+      case 'هام جدا':
+        return Colors.red.shade600;
       case 'هام':
-        return Colors.orange.shade700; // Stronger orange
+        return Colors.orange.shade700;
+      case 'عادي':
+        return Colors.blue.shade700;
       default:
-        return Colors.blue.shade700; // Stronger blue
+        return Colors.blue.shade700;
     }
   }
 
@@ -1737,10 +1901,14 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
 
   IconData _getPriorityIcon(String priority) {
     switch (priority) {
-      case 'عاجل':
+      case 'هام للغاية':
         return Icons.priority_high_rounded;
-      case 'هام':
+      case 'هام جدا':
         return Icons.warning_rounded;
+      case 'هام':
+        return Icons.warning_amber_rounded;
+      case 'عادي':
+        return Icons.low_priority_rounded;
       default:
         return Icons.low_priority_rounded;
     }
@@ -1953,6 +2121,232 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
             },
           ),
       ],
+    );
+  }
+}
+
+// Add new dialog widget for user assignment
+class _UserAssignmentDialog extends StatefulWidget {
+  final List<Map<String, dynamic>> allUsers;
+  final List<String> currentAssignedUserIds;
+
+  const _UserAssignmentDialog({
+    required this.allUsers,
+    required this.currentAssignedUserIds,
+  });
+
+  @override
+  State<_UserAssignmentDialog> createState() => _UserAssignmentDialogState();
+}
+
+class _UserAssignmentDialogState extends State<_UserAssignmentDialog> {
+  late List<String> selectedUserIds;
+  String searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    selectedUserIds = List.from(widget.currentAssignedUserIds);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    // Filter users based on search query
+    final filteredUsers = widget.allUsers.where((user) {
+      final name = user['name']?.toString().toLowerCase() ?? '';
+      return name.contains(searchQuery.toLowerCase());
+    }).toList();
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.9,
+        height: MediaQuery.of(context).size.height * 0.7,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Icon(
+                  Icons.people_rounded,
+                  color: colorScheme.primary,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'تعديل تعيينات المهمة',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Search field
+            TextField(
+              decoration: InputDecoration(
+                hintText: 'البحث عن مستخدم...',
+                prefixIcon: const Icon(Icons.search_rounded),
+                filled: true,
+                fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (value) {
+                setState(() {
+                  searchQuery = value;
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Selected users count
+            if (selectedUserIds.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  'محدد: ${selectedUserIds.length} مستخدم',
+                  style: TextStyle(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Users list
+            Expanded(
+              child: ListView.builder(
+                itemCount: filteredUsers.length,
+                itemBuilder: (context, index) {
+                  final user = filteredUsers[index];
+                  final userId = user['id'].toString();
+                  final isSelected = selectedUserIds.contains(userId);
+                  final userName = user['name'] ?? 'مستخدم غير معروف';
+                  final userAvatar = user['avatar_url'];
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? colorScheme.primary.withOpacity(0.1)
+                          : colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected
+                            ? colorScheme.primary
+                            : colorScheme.outline.withOpacity(0.2),
+                      ),
+                    ),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        radius: 24,
+                        backgroundColor: colorScheme.primary.withOpacity(0.1),
+                        backgroundImage: userAvatar != null
+                            ? NetworkImage(userAvatar)
+                            : null,
+                        child: userAvatar == null
+                            ? Text(
+                                userName.isNotEmpty
+                                    ? userName[0].toUpperCase()
+                                    : '?',
+                                style: TextStyle(
+                                  color: colorScheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
+                            : null,
+                      ),
+                      title: Text(
+                        userName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: isSelected
+                              ? colorScheme.primary
+                              : colorScheme.onSurface,
+                        ),
+                      ),
+                      trailing: isSelected
+                          ? Icon(
+                              Icons.check_circle_rounded,
+                              color: colorScheme.primary,
+                            )
+                          : Icon(
+                              Icons.circle_outlined,
+                              color: colorScheme.outline,
+                            ),
+                      onTap: () {
+                        setState(() {
+                          if (isSelected) {
+                            selectedUserIds.remove(userId);
+                          } else {
+                            selectedUserIds.add(userId);
+                          }
+                        });
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Action buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      side: BorderSide(color: colorScheme.outline),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('إلغاء'),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(selectedUserIds),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('حفظ التغييرات'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

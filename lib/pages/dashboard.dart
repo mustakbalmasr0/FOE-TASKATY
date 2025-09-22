@@ -37,6 +37,9 @@ class _DashboardPageState extends State<DashboardPage>
 
   List<Map<String, dynamic>> _filteredTasks = [];
 
+  // Add new state variable for today/all filter
+  bool _showTodayOnly = true;
+
   // Add real-time channel for tasks
   late RealtimeChannel _tasksChannel;
 
@@ -98,7 +101,7 @@ class _DashboardPageState extends State<DashboardPage>
       if (isSameDay(_selectedDay, selectedDay)) {
         // If the same day is selected again, deselect it
         _selectedDay = null;
-        _filteredTasks = _allTasks; // Show all tasks
+        _applyCurrentFilter();
       } else {
         _selectedDay = selectedDay;
         _focusedDay = focusedDay;
@@ -112,24 +115,68 @@ class _DashboardPageState extends State<DashboardPage>
         DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
     final endOfDay = startOfDay.add(const Duration(days: 1));
     setState(() {
-      _filteredTasks = _allTasks.where((task) {
+      final filteredByDate = _allTasks.where((task) {
         // Ensure 'created_at' is not null before parsing
         if (task['created_at'] == null) return false;
         final createdAt = DateTime.parse(task['created_at']);
         return createdAt.isAfter(startOfDay) && createdAt.isBefore(endOfDay);
       }).toList();
+
+      // Apply status-based sorting to filtered tasks
+      _filteredTasks = _sortTasksByStatusPriority(filteredByDate);
     });
   }
 
   List<Map<String, dynamic>> _getTasksForDay(DateTime day) {
     final startOfDay = DateTime(day.year, day.month, day.day);
     final endOfDay = startOfDay.add(const Duration(days: 1));
-    return _allTasks.where((task) {
+    final tasksForDay = _allTasks.where((task) {
       // Ensure 'created_at' is not null before parsing
       if (task['created_at'] == null) return false;
       final createdAt = DateTime.parse(task['created_at']);
       return createdAt.isAfter(startOfDay) && createdAt.isBefore(endOfDay);
     }).toList();
+
+    // Apply status-based sorting to tasks for the day
+    return _sortTasksByStatusPriority(tasksForDay);
+  }
+
+  // Add method to sort tasks by status priority
+  List<Map<String, dynamic>> _sortTasksByStatusPriority(
+      List<Map<String, dynamic>> tasks) {
+    final sortedTasks = List<Map<String, dynamic>>.from(tasks);
+
+    sortedTasks.sort((a, b) {
+      final statusA = a['status'] ?? 'in_progress';
+      final statusB = b['status'] ?? 'in_progress';
+
+      // Define priority order: in_progress (1), completed (2)
+      int getPriority(String status) {
+        switch (status) {
+          case 'in_progress':
+            return 1;
+          case 'completed':
+            return 2;
+          default:
+            return 1;
+        }
+      }
+
+      final priorityA = getPriority(statusA);
+      final priorityB = getPriority(statusB);
+
+      // If priorities are different, sort by priority
+      if (priorityA != priorityB) {
+        return priorityA.compareTo(priorityB);
+      }
+
+      // If same priority, sort by creation date (newest first)
+      final dateA = DateTime.tryParse(a['created_at'] ?? '') ?? DateTime.now();
+      final dateB = DateTime.tryParse(b['created_at'] ?? '') ?? DateTime.now();
+      return dateB.compareTo(dateA);
+    });
+
+    return sortedTasks;
   }
 
   Future<void> _fetchAllTasks() async {
@@ -226,19 +273,20 @@ class _DashboardPageState extends State<DashboardPage>
         }
 
         // Ensure task has status from tasks table (this is the key change)
-        task['status'] = task['status'] ?? 'new';
+        task['status'] = task['status'] ?? 'in_progress';
 
         return task;
       }).toList();
 
       if (mounted) {
         setState(() {
-          _allTasks = enrichedTasks;
-          // Apply initial filter if a day is selected when refetching
+          // Apply status-based sorting to all tasks
+          _allTasks = _sortTasksByStatusPriority(enrichedTasks);
+          // Apply filter based on current state
           if (_selectedDay != null) {
             _filterTasksByDate(_selectedDay!);
           } else {
-            _filteredTasks = enrichedTasks;
+            _applyCurrentFilter();
           }
           debugPrint('Fetched Tasks: ${_allTasks.length}');
         });
@@ -302,8 +350,8 @@ class _DashboardPageState extends State<DashboardPage>
 
     if (selectedTasks.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('يرجى تحديد المهام التي تريد تصديرها إلى PDF.'),
+        SnackBar(
+          content: const Text('يرجى تحديد المهام التي تريد تصديرها إلى PDF.'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -390,11 +438,21 @@ class _DashboardPageState extends State<DashboardPage>
     });
   }
 
-  // New method to handle show all tasks
+  // Update method to handle show all tasks
   void _handleShowAllTasks() {
     setState(() {
-      _selectedDay = null; // Clear the selected day
-      _filteredTasks = _allTasks; // Show all tasks from the main list
+      _selectedDay = null;
+      _showTodayOnly = false;
+      _filteredTasks = _sortTasksByStatusPriority(_allTasks);
+    });
+  }
+
+  // Add new method to show today's tasks
+  void _handleShowTodayTasks() {
+    setState(() {
+      _selectedDay = null;
+      _showTodayOnly = true;
+      _filterTasksByToday();
     });
   }
 
@@ -441,11 +499,35 @@ class _DashboardPageState extends State<DashboardPage>
     }
   }
 
+  void _applyCurrentFilter() {
+    if (_showTodayOnly) {
+      _filterTasksByToday();
+    } else {
+      _filteredTasks = _sortTasksByStatusPriority(_allTasks);
+    }
+  }
+
+  void _filterTasksByToday() {
+    final today = DateTime.now();
+    final startOfDay = DateTime(today.year, today.month, today.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+
+    setState(() {
+      final filteredByDate = _allTasks.where((task) {
+        if (task['created_at'] == null) return false;
+        final createdAt = DateTime.parse(task['created_at']);
+        return createdAt.isAfter(startOfDay) && createdAt.isBefore(endOfDay);
+      }).toList();
+
+      _filteredTasks = _sortTasksByStatusPriority(filteredByDate);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final displayTasks = _selectedDay != null ? _filteredTasks : _allTasks;
+    final displayTasks = _selectedDay != null ? _filteredTasks : _filteredTasks;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -482,16 +564,20 @@ class _DashboardPageState extends State<DashboardPage>
                         SliverToBoxAdapter(
                           child: Center(
                             child: Container(
-                              margin: const EdgeInsets.all(32),
-                              padding: const EdgeInsets.all(32),
+                              margin:
+                                  const EdgeInsets.all(40), // Increased from 32
+                              padding:
+                                  const EdgeInsets.all(40), // Increased from 32
                               decoration: BoxDecoration(
                                 color: colorScheme.surface.withOpacity(0.8),
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: BorderRadius.circular(
+                                    24), // Increased from 20
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black.withOpacity(0.1),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 5),
+                                    blurRadius: 15, // Increased from 10
+                                    offset:
+                                        const Offset(0, 8), // Increased from 5
                                   ),
                                 ],
                               ),
@@ -502,24 +588,29 @@ class _DashboardPageState extends State<DashboardPage>
                                     _selectedDay != null
                                         ? Icons.event_busy
                                         : Icons.assignment_outlined,
-                                    size: 64,
+                                    size: 80, // Increased from 64
                                     color: colorScheme.primary.withOpacity(0.5),
                                   ),
-                                  const SizedBox(height: 16),
+                                  const SizedBox(
+                                      height: 24), // Increased from 16
                                   Text(
                                     _selectedDay != null
                                         ? 'لا توجد مهام في هذا اليوم'
                                         : 'لا توجد مهام حالياً',
-                                    style: theme.textTheme.titleLarge,
+                                    style: theme.textTheme
+                                        .headlineSmall, // Keep same size for readability
                                   ),
-                                  const SizedBox(height: 8),
+                                  const SizedBox(
+                                      height: 12), // Increased from 8
                                   Text(
                                     _selectedDay != null
                                         ? 'جرب اختيار يوم آخر من التقويم'
                                         : 'قم بإنشاء مهمة جديدة باستخدام زر إنشاء مهمة',
-                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      // Changed from bodyMedium
                                       color: theme.textTheme.bodySmall?.color,
                                     ),
+                                    textAlign: TextAlign.center,
                                   ),
                                 ],
                               ),
@@ -528,14 +619,15 @@ class _DashboardPageState extends State<DashboardPage>
                         )
                       else
                         SliverPadding(
-                          padding: const EdgeInsets.all(16),
+                          padding:
+                              const EdgeInsets.all(20), // Increased from 16
                           sliver: SliverGrid(
                             gridDelegate:
                                 const SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent: 400,
-                              mainAxisSpacing: 16,
-                              crossAxisSpacing: 16,
-                              mainAxisExtent: 280,
+                              maxCrossAxisExtent: 450, // Increased from 400
+                              mainAxisSpacing: 20, // Increased from 16
+                              crossAxisSpacing: 20, // Increased from 16
+                              mainAxisExtent: 320, // Increased from 280
                             ),
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
@@ -611,12 +703,14 @@ class _DashboardPageState extends State<DashboardPage>
           DashboardSidebar(
             onCalendarPressed: _showCalendarBottomSheet,
             onShowAllTasks: _handleShowAllTasks,
+            onShowTodayTasks: _handleShowTodayTasks, // Add this line
             onGeneratePdf: _generatePdfReport,
             onRefresh: _fetchAllTasks,
             onSelectAll: _handleSelectAll,
             isAllSelected: _selectedTaskIds.length == displayTasks.length,
             selectedCount: _selectedTaskIds.length,
             totalTasks: displayTasks.length,
+            showTodayOnly: _showTodayOnly, // Add this line
           ),
         ],
       ),
@@ -629,25 +723,27 @@ class _DashboardPageState extends State<DashboardPage>
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16), // Increased from 12
           decoration: BoxDecoration(
             color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16), // Increased from 12
           ),
-          child: Icon(icon, color: color, size: 28),
+          child: Icon(icon, color: color, size: 36), // Increased from 28
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16), // Increased from 12
         Text(
           value,
-          style: theme.textTheme.headlineSmall?.copyWith(
+          style: theme.textTheme.headlineMedium?.copyWith(
+            // Changed from headlineSmall
             fontWeight: FontWeight.bold,
             color: color,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 8), // Increased from 4
         Text(
           label,
-          style: theme.textTheme.bodySmall?.copyWith(
+          style: theme.textTheme.bodyLarge?.copyWith(
+            // Changed from bodySmall
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -657,27 +753,19 @@ class _DashboardPageState extends State<DashboardPage>
 
   Widget _buildStatsCard(ColorScheme colorScheme, ThemeData theme,
       List<Map<String, dynamic>> tasks) {
-    // Use status from tasks table instead of assignments
     final completedTasks = tasks.where((task) {
       return task['status'] == 'completed';
     }).length;
 
     final inProgressTasks = tasks.where((task) {
-      return task['status'] == 'in_progress';
-    }).length;
-
-    final pendingTasks = tasks.where((task) {
-      return task['status'] == 'pending';
-    }).length;
-
-    final newTasks = tasks.where((task) {
-      return task['status'] == 'new' || task['status'] == null;
+      return task['status'] == 'in_progress' || task['status'] == null;
     }).length;
 
     return Card(
-      margin: const EdgeInsets.all(16),
-      elevation: 8,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      margin: const EdgeInsets.all(20), // Increased from 16
+      elevation: 12, // Increased from 8
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24)), // Increased from 20
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -688,54 +776,44 @@ class _DashboardPageState extends State<DashboardPage>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24), // Increased from 20
         ),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(28), // Increased from 20
           child: Column(
             children: [
-              // Show date if a day is selected
-              if (_selectedDay != null)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'مهام يوم ${_formatDate(_selectedDay.toString())}',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: colorScheme.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
+              // Show appropriate header based on current filter
+              Container(
+                margin: const EdgeInsets.only(bottom: 24), // Increased from 16
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 12), // Increased padding
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16), // Increased from 12
+                ),
+                child: Text(
+                  _selectedDay != null
+                      ? 'مهام يوم ${_formatDate(_selectedDay.toString())}'
+                      : _showTodayOnly
+                          ? 'مهام اليوم'
+                          : 'جميع المهام',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    // Changed from titleMedium
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-              // Updated stats grid with all statuses
+              ),
+              // Updated stats grid with only two categories
               Wrap(
-                spacing: 16,
-                runSpacing: 16,
+                spacing: 24, // Increased from 16
+                runSpacing: 24, // Increased from 16
                 children: [
                   _buildStatItem(
                     'إجمالي المهام',
                     tasks.length.toString(),
                     Icons.assignment,
                     colorScheme.primary,
-                    theme,
-                  ),
-                  _buildStatItem(
-                    'جديدة',
-                    newTasks.toString(),
-                    Icons.fiber_new,
-                    Colors.grey,
-                    theme,
-                  ),
-                  _buildStatItem(
-                    'قيد الانتظار',
-                    pendingTasks.toString(),
-                    Icons.schedule,
-                    Colors.orange,
                     theme,
                   ),
                   _buildStatItem(
@@ -768,7 +846,7 @@ class _DashboardPageState extends State<DashboardPage>
       case 'in_progress':
         return 'قيد التنفيذ';
       default:
-        return 'جديدة';
+        return 'قيد التنفيذ';
     }
   }
 

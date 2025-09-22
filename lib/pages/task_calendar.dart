@@ -28,8 +28,8 @@ class TaskCalendar extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final filteredTasksCount = eventLoader(selectedDay ?? DateTime.now()).length;
-
+    final filteredTasksCount =
+        eventLoader(selectedDay ?? DateTime.now()).length;
 
     return SizeTransition(
       sizeFactor: animation,

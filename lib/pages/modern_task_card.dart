@@ -47,14 +47,14 @@ class ModernTaskCard extends StatelessWidget {
     final uniqueAssigneesList = uniqueAssignees.values.toList();
 
     return Container(
-      margin: const EdgeInsets.all(4),
+      margin: const EdgeInsets.all(6), // Increased from 4
       child: Material(
         elevation: 0,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24), // Increased from 20
         color: Colors.transparent,
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(24), // Increased from 20
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -84,25 +84,24 @@ class ModernTaskCard extends StatelessWidget {
             ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(24), // Increased from 20
             child: Material(
               color: Colors.transparent,
               child: InkWell(
                 onTap: onTap,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(24), // Increased from 20
                 splashColor: colorScheme.primary.withOpacity(0.1),
                 highlightColor: colorScheme.primary.withOpacity(0.05),
                 child: Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(20), // Reduced from 24
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                       // Header with checkbox and status
                       Row(
                         children: [
                           _buildModernCheckbox(),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 12), // Reduced from 16
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -110,16 +109,18 @@ class ModernTaskCard extends StatelessWidget {
                                 Text(
                                   task['title'] ?? 'بدون عنوان',
                                   style: theme.textTheme.titleMedium?.copyWith(
+                                    // Changed back from titleLarge
                                     fontWeight: FontWeight.bold,
                                     color: colorScheme.onSurface,
                                   ),
-                                  maxLines: 1,
+                                  maxLines: 3, // Increased from 2 to allow more lines
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 4), // Reduced from 6
                                 Text(
                                   _formatDate(task['created_at']),
                                   style: theme.textTheme.bodySmall?.copyWith(
+                                    // Changed back from bodyMedium
                                     color:
                                         colorScheme.onSurface.withOpacity(0.6),
                                   ),
@@ -130,242 +131,258 @@ class ModernTaskCard extends StatelessWidget {
                           _buildModernStatusChip(
                               status, statusColor, statusText),
                           if (onDelete != null) ...[
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 8), // Reduced from 12
                             _buildDeleteButton(context),
                           ],
                         ],
                       ),
 
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 16), // Reduced from 20
 
                       // Description
                       if (task['description'] != null) ...[
                         Container(
-                          padding: const EdgeInsets.all(12),
+                          padding:
+                              const EdgeInsets.all(12), // Reduced from 16
                           decoration: BoxDecoration(
                             color: colorScheme.surfaceVariant.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius:
+                                BorderRadius.circular(12), // Reduced from 16
                           ),
                           child: Text(
                             task['description'],
                             style: theme.textTheme.bodyMedium?.copyWith(
+                              // Changed back from bodyLarge
                               color: colorScheme.onSurface.withOpacity(0.8),
-                              height: 1.4,
+                              height: 1.3, // Reduced line height from 1.4
                             ),
-                            maxLines: 2,
+                            maxLines: 2, // Reduced from 3 to save space
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 16), // Reduced from 20
                       ],
 
                       // Users section
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color:
-                                colorScheme.primaryContainer.withOpacity(0.3),
+                      Flexible( // Wrapped in Flexible to prevent overflow
+                        child: Container(
+                          padding: const EdgeInsets.all(12), // Reduced from 16
+                          decoration: BoxDecoration(
+                            color: colorScheme.primaryContainer.withOpacity(0.1),
+                            borderRadius:
+                                BorderRadius.circular(12), // Reduced from 16
+                            border: Border.all(
+                              color:
+                                  colorScheme.primaryContainer.withOpacity(0.3),
+                            ),
                           ),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: _buildModernUserInfo(
-                                'منشئ',
-                                creatorProfile,
-                                Icons.person_add,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildModernUserInfo(
+                                  'منشئ',
+                                  creatorProfile,
+                                  Icons.person_add,
+                                ),
                               ),
-                            ),
-                            Container(
-                              width: 1,
-                              height: 40,
-                              color: colorScheme.outline.withOpacity(0.3),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(Icons.assignment_ind,
-                                          size: 14, color: colorScheme.primary),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'معين إلى',
-                                        style:
-                                            theme.textTheme.bodySmall?.copyWith(
-                                          color: colorScheme.primary,
-                                          fontWeight: FontWeight.w600,
+                              Container(
+                                width: 1,
+                                height: 40, // Reduced from 50
+                                color: colorScheme.outline.withOpacity(0.3),
+                              ),
+                              const SizedBox(width: 12), // Reduced from 16
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.assignment_ind,
+                                            size: 18,
+                                            color: colorScheme
+                                                .primary), // Increased from 14
+                                        const SizedBox(
+                                            width: 6), // Increased from 4
+                                        Text(
+                                          'معين إلى',
+                                          style: theme.textTheme.bodyMedium
+                                              ?.copyWith(
+                                            // Changed from bodySmall
+                                            color: colorScheme.primary,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  if (uniqueAssigneesList.isNotEmpty)
-                                    uniqueAssigneesList.length > 1
-                                        ? SizedBox(
-                                            height: 56,
-                                            child: ListView.builder(
-                                              itemCount:
-                                                  uniqueAssigneesList.length,
-                                              itemBuilder: (context, idx) {
-                                                final assignee =
-                                                    uniqueAssigneesList[idx];
-                                                final name = assignee['name']
-                                                        ?.toString() ??
-                                                    'غير محدد';
-                                                final avatarUrl =
-                                                    assignee['avatar_url']
-                                                        ?.toString();
-
-                                                return Padding(
-                                                  padding:
-                                                      const EdgeInsets.only(
-                                                          bottom: 8.0),
-                                                  child: Row(
-                                                    children: [
-                                                      CircleAvatar(
-                                                        radius: 16,
-                                                        backgroundColor:
-                                                            colorScheme
-                                                                .primaryContainer
-                                                                .withOpacity(
-                                                                    0.7),
-                                                        backgroundImage:
-                                                            avatarUrl != null &&
-                                                                    avatarUrl
-                                                                        .isNotEmpty
-                                                                ? NetworkImage(
-                                                                    avatarUrl)
-                                                                : null,
-                                                        child: avatarUrl ==
-                                                                    null ||
-                                                                avatarUrl
-                                                                    .isEmpty
-                                                            ? Text(
-                                                                name.isNotEmpty
-                                                                    ? name[0]
-                                                                        .toUpperCase()
-                                                                    : '?',
-                                                                style:
-                                                                    TextStyle(
-                                                                  color: colorScheme
-                                                                      .onPrimaryContainer,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  fontSize: 12,
-                                                                ),
-                                                              )
-                                                            : null,
-                                                      ),
-                                                      const SizedBox(width: 8),
-                                                      Expanded(
-                                                        child: Text(
-                                                          name,
-                                                          style: theme.textTheme
-                                                              .bodySmall
-                                                              ?.copyWith(
-                                                            fontWeight:
-                                                                FontWeight.w500,
-                                                            color: colorScheme
-                                                                .onSurface,
-                                                          ),
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                          )
-                                        : Row(
-                                            children: [
-                                              CircleAvatar(
-                                                radius: 16,
-                                                backgroundColor: colorScheme
-                                                    .primaryContainer
-                                                    .withOpacity(0.7),
-                                                backgroundImage: uniqueAssigneesList[
-                                                                    0][
-                                                                'avatar_url'] !=
-                                                            null &&
-                                                        uniqueAssigneesList[0]
-                                                                ['avatar_url']
-                                                            .toString()
-                                                            .isNotEmpty
-                                                    ? NetworkImage(
-                                                        uniqueAssigneesList[0]
-                                                            ['avatar_url'])
-                                                    : null,
-                                                child: uniqueAssigneesList[0][
-                                                                'avatar_url'] ==
-                                                            null ||
-                                                        uniqueAssigneesList[0]
-                                                                ['avatar_url']
-                                                            .toString()
-                                                            .isEmpty
-                                                    ? Text(
-                                                        (uniqueAssigneesList[0]
-                                                                        ['name']
-                                                                    ?.toString()
-                                                                    .isNotEmpty ??
-                                                                false)
-                                                            ? uniqueAssigneesList[
-                                                                    0]['name']
-                                                                .toString()[0]
-                                                                .toUpperCase()
-                                                            : '?',
-                                                        style: TextStyle(
-                                                          color: colorScheme
-                                                              .onPrimaryContainer,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: 12,
-                                                        ),
-                                                      )
-                                                    : null,
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: Text(
-                                                  uniqueAssigneesList[0]['name']
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8), // Increased from 6
+                                    if (uniqueAssigneesList.isNotEmpty)
+                                      uniqueAssigneesList.length > 1
+                                          ? SizedBox(
+                                              height: 56,
+                                              child: ListView.builder(
+                                                itemCount:
+                                                    uniqueAssigneesList.length,
+                                                itemBuilder: (context, idx) {
+                                                  final assignee =
+                                                      uniqueAssigneesList[idx];
+                                                  final name = assignee['name']
                                                           ?.toString() ??
-                                                      'غير محدد',
-                                                  style: theme
-                                                      .textTheme.bodySmall
-                                                      ?.copyWith(
-                                                    fontWeight: FontWeight.w500,
-                                                    color:
-                                                        colorScheme.onSurface,
-                                                  ),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
+                                                      'غير محدد';
+                                                  final avatarUrl =
+                                                      assignee['avatar_url']
+                                                          ?.toString();
+
+                                                  return Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            bottom: 8.0),
+                                                    child: Row(
+                                                      children: [
+                                                        CircleAvatar(
+                                                          radius:
+                                                              20, // Increased from 16
+                                                          backgroundColor:
+                                                              colorScheme
+                                                                  .primaryContainer
+                                                                  .withOpacity(
+                                                                      0.7),
+                                                          backgroundImage:
+                                                              avatarUrl != null &&
+                                                                      avatarUrl
+                                                                          .isNotEmpty
+                                                                  ? NetworkImage(
+                                                                      avatarUrl)
+                                                                  : null,
+                                                          child:
+                                                              avatarUrl == null ||
+                                                                      avatarUrl
+                                                                          .isEmpty
+                                                                  ? Text(
+                                                                      name.isNotEmpty
+                                                                          ? name[0]
+                                                                              .toUpperCase()
+                                                                          : '?',
+                                                                      style:
+                                                                          TextStyle(
+                                                                        color: colorScheme
+                                                                            .onPrimaryContainer,
+                                                                        fontWeight:
+                                                                            FontWeight.bold,
+                                                                        fontSize:
+                                                                            16, // Increased from 12
+                                                                      ),
+                                                                    )
+                                                                  : null,
+                                                        ),
+                                                        const SizedBox(
+                                                            width:
+                                                                12), // Increased from 8
+                                                        Expanded(
+                                                          child: Text(
+                                                            name,
+                                                            style: theme.textTheme
+                                                                .bodyMedium // Changed from bodySmall
+                                                                ?.copyWith(
+                                                              fontWeight:
+                                                                  FontWeight.w500,
+                                                              color: colorScheme
+                                                                  .onSurface,
+                                                            ),
+                                                            maxLines: 1,
+                                                            overflow: TextOverflow
+                                                                .ellipsis,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                },
                                               ),
-                                            ],
-                                          )
+                                            )
+                                          : Row(
+                                              children: [
+                                                CircleAvatar(
+                                                  radius: 20, // Increased from 16
+                                                  backgroundColor: colorScheme
+                                                      .primaryContainer
+                                                      .withOpacity(0.7),
+                                                  backgroundImage: uniqueAssigneesList[
+                                                                      0][
+                                                                  'avatar_url'] !=
+                                                              null &&
+                                                          uniqueAssigneesList[0]
+                                                                  ['avatar_url']
+                                                              .toString()
+                                                              .isNotEmpty
+                                                      ? NetworkImage(
+                                                          uniqueAssigneesList[0]
+                                                              ['avatar_url'])
+                                                      : null,
+                                                  child: uniqueAssigneesList[0][
+                                                                  'avatar_url'] ==
+                                                              null ||
+                                                          uniqueAssigneesList[0]
+                                                                  ['avatar_url']
+                                                              .toString()
+                                                              .isEmpty
+                                                      ? Text(
+                                                          (uniqueAssigneesList[0]
+                                                                          ['name']
+                                                                      ?.toString()
+                                                                      .isNotEmpty ??
+                                                                  false)
+                                                              ? uniqueAssigneesList[
+                                                                      0]['name']
+                                                                  .toString()[0]
+                                                                  .toUpperCase()
+                                                              : '?',
+                                                          style: TextStyle(
+                                                            color: colorScheme
+                                                                .onPrimaryContainer,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize:
+                                                                16, // Increased from 12
+                                                          ),
+                                                        )
+                                                      : null,
+                                                ),
+                                                const SizedBox(
+                                                    width:
+                                                        12), // Increased from 8
+                                                Expanded(
+                                                  child: Text(
+                                                    uniqueAssigneesList[0]['name']
+                                                            ?.toString() ??
+                                                        'غير محدد',
+                                                    style: theme.textTheme
+                                                        .bodyMedium // Changed from bodySmall
+                                                        ?.copyWith(
+                                                      fontWeight: FontWeight.w500,
+                                                      color:
+                                                          colorScheme.onSurface,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            )
                                   else
                                     Text(
                                       'غير محدد',
                                       style:
-                                          theme.textTheme.bodySmall?.copyWith(
+                                          theme.textTheme.bodyMedium?.copyWith(
+                                        // Changed from bodySmall
                                         color: colorScheme.onSurface
                                             .withOpacity(0.7),
                                       ),
                                     ),
-                                ],
+                            ]),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -384,11 +401,11 @@ class ModernTaskCard extends StatelessWidget {
       onTap: () => onSelectionChanged(!isSelected),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        width: 24,
-        height: 24,
+        width: 28, // Increased from 24
+        height: 28, // Increased from 24
         decoration: BoxDecoration(
           color: isSelected ? colorScheme.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(8), // Increased from 6
           border: Border.all(
             color: isSelected
                 ? colorScheme.primary
@@ -400,7 +417,7 @@ class ModernTaskCard extends StatelessWidget {
             ? Icon(
                 Icons.check,
                 color: colorScheme.onPrimary,
-                size: 16,
+                size: 20, // Increased from 16
               )
             : null,
       ),
@@ -409,7 +426,8 @@ class ModernTaskCard extends StatelessWidget {
 
   Widget _buildModernStatusChip(String status, Color color, String text) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+          horizontal: 16, vertical: 8), // Increased padding
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -417,7 +435,7 @@ class ModernTaskCard extends StatelessWidget {
             color.withOpacity(0.05),
           ],
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24), // Increased from 20
         border: Border.all(
           color: color.withOpacity(0.3),
         ),
@@ -426,20 +444,20 @@ class ModernTaskCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 8,
-            height: 8,
+            width: 10, // Increased from 8
+            height: 10, // Increased from 8
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8), // Increased from 6
           Text(
             text,
             style: TextStyle(
               color: color,
               fontWeight: FontWeight.w600,
-              fontSize: 12,
+              fontSize: 14, // Increased from 12
             ),
           ),
         ],
@@ -459,25 +477,26 @@ class ModernTaskCard extends StatelessWidget {
           children: [
             Icon(
               icon,
-              size: 14,
+              size: 18, // Increased from 14
               color: colorScheme.primary,
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6), // Increased from 4
             Text(
               label,
-              style: theme.textTheme.bodySmall?.copyWith(
+              style: theme.textTheme.bodyMedium?.copyWith(
+                // Changed from bodySmall
                 color: colorScheme.primary,
                 fontWeight: FontWeight.w600,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8), // Increased from 6
         Row(
           children: [
             Container(
-              width: 32,
-              height: 32,
+              width: 40, // Increased from 32
+              height: 40, // Increased from 32
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
@@ -503,11 +522,12 @@ class ModernTaskCard extends StatelessWidget {
                     )
                   : _buildAvatarFallback(name),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12), // Increased from 8
             Expanded(
               child: Text(
                 name,
-                style: theme.textTheme.bodySmall?.copyWith(
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  // Changed from bodySmall
                   fontWeight: FontWeight.w500,
                   color: colorScheme.onSurface,
                 ),
@@ -523,8 +543,8 @@ class ModernTaskCard extends StatelessWidget {
 
   Widget _buildAvatarFallback(String name) {
     return Container(
-      width: 32,
-      height: 32,
+      width: 40, // Increased from 32
+      height: 40, // Increased from 32
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
@@ -540,7 +560,7 @@ class ModernTaskCard extends StatelessWidget {
           style: TextStyle(
             color: colorScheme.onPrimaryContainer,
             fontWeight: FontWeight.bold,
-            fontSize: 14,
+            fontSize: 18, // Increased from 14
           ),
         ),
       ),
@@ -587,17 +607,17 @@ class ModernTaskCard extends StatelessWidget {
     return GestureDetector(
       onTap: () => _showDeleteConfirmation(context),
       child: Container(
-        padding: const EdgeInsets.all(6),
+        padding: const EdgeInsets.all(8), // Increased from 6
         decoration: BoxDecoration(
           color: Colors.red.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10), // Increased from 8
           border: Border.all(
             color: Colors.red.withOpacity(0.3),
           ),
         ),
         child: Icon(
           Icons.delete_outline,
-          size: 18,
+          size: 22, // Increased from 18
           color: Colors.red,
         ),
       ),
@@ -691,3 +711,4 @@ class ModernTaskCard extends StatelessWidget {
     );
   }
 }
+

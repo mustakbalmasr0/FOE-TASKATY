@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'successs_message.dart';
 
 class UserTaskDetailsSheet extends StatefulWidget {
   final Map<String, dynamic> assignment;
@@ -21,17 +22,20 @@ class UserTaskDetailsSheet extends StatefulWidget {
 class _UserTaskDetailsSheetState extends State<UserTaskDetailsSheet> {
   List<Map<String, dynamic>> _taskAttachments = [];
   bool _isLoadingAttachments = false;
+  late Map<String, dynamic> _currentAssignment;
+  bool _isUpdatingStatus = false;
 
   @override
   void initState() {
     super.initState();
+    _currentAssignment = Map<String, dynamic>.from(widget.assignment);
     _fetchTaskAttachments();
   }
 
   Future<void> _fetchTaskAttachments() async {
     setState(() => _isLoadingAttachments = true);
     try {
-      final task = widget.assignment['task'] as Map<String, dynamic>;
+      final task = _currentAssignment['task'] as Map<String, dynamic>;
       final taskId = task['id'];
 
       if (taskId != null) {
@@ -137,8 +141,8 @@ class _UserTaskDetailsSheetState extends State<UserTaskDetailsSheet> {
   }
 
   void _showStatusUpdateDialog() {
-    final task = widget.assignment['task'] as Map<String, dynamic>;
-    final currentStatus = widget.assignment['status'] ?? 'new';
+    final task = _currentAssignment['task'] as Map<String, dynamic>;
+    String currentStatus = _currentAssignment['status'] ?? 'new';
 
     showDialog(
       context: context,
@@ -175,51 +179,93 @@ class _UserTaskDetailsSheetState extends State<UserTaskDetailsSheet> {
                 ),
               ],
             ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .surfaceVariant
-                        .withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    task['title'] ?? 'بدون عنوان',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'اختر الحالة الجديدة:',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+            content: StatefulBuilder(
+              builder: (BuildContext context, StateSetter setDialogState) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceVariant
+                            .withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                ),
-                const SizedBox(height: 16),
-                _buildStatusOption('pending', 'قيد الانتظار',
-                    Icons.pending_actions, Colors.orange, currentStatus),
-                const SizedBox(height: 8),
-                _buildStatusOption('in_progress', 'قيد التنفيذ',
-                    Icons.running_with_errors, Colors.blue, currentStatus),
-                const SizedBox(height: 8),
-                _buildStatusOption('completed', 'تم التنفيذ', Icons.task_alt,
-                    Colors.green, currentStatus),
-              ],
+                      child: Text(
+                        task['title'] ?? 'بدون عنوان',
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'اختر الحالة الجديدة:',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (_isUpdatingStatus)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    else ...[
+                      _buildStatusOption(
+                          'pending',
+                          'قيد الانتظار',
+                          Icons.pending_actions,
+                          Colors.orange,
+                          currentStatus, (newStatus) {
+                        setDialogState(() {
+                          currentStatus = newStatus;
+                        });
+                      }),
+                      const SizedBox(height: 8),
+                      _buildStatusOption(
+                          'in_progress',
+                          'قيد التنفيذ',
+                          Icons.running_with_errors,
+                          Colors.blue,
+                          currentStatus, (newStatus) {
+                        setDialogState(() {
+                          currentStatus = newStatus;
+                        });
+                      }),
+                      const SizedBox(height: 8),
+                      _buildStatusOption(
+                          'completed',
+                          'تم التنفيذ',
+                          Icons.task_alt,
+                          Colors.green,
+                          currentStatus, (newStatus) {
+                        setDialogState(() {
+                          currentStatus = newStatus;
+                        });
+                      }),
+                    ],
+                  ],
+                );
+              },
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: _isUpdatingStatus
+                    ? null
+                    : () => Navigator.of(context).pop(),
                 child: Text(
                   'إلغاء',
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
+                    color: _isUpdatingStatus
+                        ? Colors.grey
+                        : Theme.of(context).colorScheme.primary,
                   ),
                 ),
               ),
@@ -230,17 +276,98 @@ class _UserTaskDetailsSheetState extends State<UserTaskDetailsSheet> {
     );
   }
 
-  Widget _buildStatusOption(String statusValue, String statusText,
-      IconData icon, Color color, String currentStatus) {
+  Widget _buildStatusOption(
+      String statusValue,
+      String statusText,
+      IconData icon,
+      Color color,
+      String currentStatus,
+      Function(String) onStatusChanged) {
     final isSelected = currentStatus == statusValue;
 
     return GestureDetector(
-      onTap: () {
-        final task = widget.assignment['task'] as Map<String, dynamic>;
-        widget.onStatusUpdate(task['id'], widget.assignment['id'], statusValue);
-        Navigator.of(context).pop();
-        Navigator.of(context).pop(); // Close the sheet as well
-      },
+      onTap: _isUpdatingStatus
+          ? null
+          : () async {
+              if (currentStatus == statusValue) return;
+
+              onStatusChanged(statusValue);
+
+              setState(() {
+                _isUpdatingStatus = true;
+              });
+
+              try {
+                final task = _currentAssignment['task'] as Map<String, dynamic>;
+                final taskId = task['id'];
+                final assignmentId = _currentAssignment['id'];
+
+                final int parsedTaskId =
+                    taskId is String ? int.parse(taskId) : taskId as int;
+                final int parsedAssignmentId = assignmentId is String
+                    ? int.parse(assignmentId)
+                    : assignmentId as int;
+
+                final results = await Future.wait([
+                  Supabase.instance.client
+                      .from('tasks')
+                      .update({'status': statusValue}).eq('id', parsedTaskId),
+                  Supabase.instance.client.from('task_assignments').update(
+                      {'status': statusValue}).eq('id', parsedAssignmentId),
+                ]);
+
+                final tasksUpdateResult = results[0];
+                final assignmentsUpdateResult = results[1];
+                if ((tasksUpdateResult == null || tasksUpdateResult.isEmpty) &&
+                    (assignmentsUpdateResult == null ||
+                        assignmentsUpdateResult.isEmpty)) {
+                  throw Exception('لم يتم تحديث الحالة في قاعدة البيانات.');
+                }
+
+                if (mounted) {
+                  setState(() {
+                    _currentAssignment['status'] = statusValue;
+                    if (_currentAssignment['task'] is Map<String, dynamic>) {
+                      (_currentAssignment['task']
+                          as Map<String, dynamic>)['status'] = statusValue;
+                    }
+                  });
+                }
+
+                widget.onStatusUpdate(
+                    parsedTaskId, parsedAssignmentId, statusValue);
+
+                if (mounted) {
+                  // Close the status dialog first
+                  Navigator.of(context).pop();
+
+                  // Show success message if task completed
+                  if (statusValue == 'completed') {
+                    SuccessMessage.show(
+                      context: context,
+                      message:
+                          'لقد أتمت المهمة "${task['title'] ?? 'المهمة'}" بنجاح!\nأحسنت العمل! 👏',
+                    );
+                  } else {
+                    widget.onShowSnackBar('تم تحديث حالة المهمة بنجاح',
+                        isError: false);
+                  }
+                }
+              } catch (e) {
+                debugPrint('Error updating status: $e');
+                if (mounted) {
+                  widget.onShowSnackBar('خطأ في تحديث الحالة: ${e.toString()}',
+                      isError: true);
+                  onStatusChanged(_currentAssignment['status'] ?? 'new');
+                }
+              } finally {
+                if (mounted) {
+                  setState(() {
+                    _isUpdatingStatus = false;
+                  });
+                }
+              }
+            },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(16),
@@ -286,12 +413,43 @@ class _UserTaskDetailsSheetState extends State<UserTaskDetailsSheet> {
     );
   }
 
+  String _getStatusText(String status) {
+    switch (status.toLowerCase()) {
+      case 'new':
+        return 'جديدة';
+      case 'pending':
+        return 'قيد الانتظار';
+      case 'in_progress':
+        return 'قيد التنفيذ';
+      case 'completed':
+        return 'تم التنفيذ';
+      default:
+        return status;
+    }
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'new':
+        return Colors.grey;
+      case 'pending':
+        return Colors.orange;
+      case 'in_progress':
+        return Colors.blue;
+      case 'completed':
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final task = widget.assignment['task'] as Map<String, dynamic>;
+    final task = _currentAssignment['task'] as Map<String, dynamic>;
     final priority = task['priority'] ?? 'عادي';
+    final currentStatus = _currentAssignment['status'] ?? 'new';
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -352,22 +510,46 @@ class _UserTaskDetailsSheetState extends State<UserTaskDetailsSheet> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _getPriorityColor(priority).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            'أولوية ${_getPriorityText(priority)}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: _getPriorityColor(priority),
-                              fontWeight: FontWeight.bold,
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _getPriorityColor(priority)
+                                    .withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'أولوية ${_getPriorityText(priority)}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: _getPriorityColor(priority),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _getStatusColor(currentStatus)
+                                    .withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                _getStatusText(currentStatus),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: _getStatusColor(currentStatus),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -378,7 +560,7 @@ class _UserTaskDetailsSheetState extends State<UserTaskDetailsSheet> {
 
               // Description
               if (task['description'] != null &&
-                  task['description'].isNotEmpty) ...[
+                  task['description'].toString().isNotEmpty) ...[
                 Text(
                   'الوصف',
                   style: theme.textTheme.titleMedium?.copyWith(
@@ -394,7 +576,7 @@ class _UserTaskDetailsSheetState extends State<UserTaskDetailsSheet> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    task['description'],
+                    task['description'].toString(),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       height: 1.5,
                     ),
@@ -433,7 +615,7 @@ class _UserTaskDetailsSheetState extends State<UserTaskDetailsSheet> {
                     return Card(
                       child: ListTile(
                         leading: Icon(_getFileIcon(attachment['file_type'])),
-                        title: Text(attachment['file_name']),
+                        title: Text(attachment['file_name'] ?? 'ملف بدون اسم'),
                         trailing: IconButton(
                           icon: const Icon(Icons.download),
                           onPressed: () =>
