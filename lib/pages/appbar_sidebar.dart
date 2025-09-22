@@ -11,23 +11,27 @@ import 'package:taskaty/pages/all_users_display.dart';
 class DashboardSidebar extends StatefulWidget {
   final VoidCallback onCalendarPressed;
   final VoidCallback onShowAllTasks;
+  final VoidCallback onShowTodayTasks; // Add this parameter
   final VoidCallback onGeneratePdf;
   final VoidCallback onRefresh;
   final VoidCallback onSelectAll;
   final bool isAllSelected;
   final int selectedCount;
   final int totalTasks;
+  final bool showTodayOnly; // Add this parameter
 
   const DashboardSidebar({
     super.key,
     required this.onCalendarPressed,
     required this.onShowAllTasks,
+    required this.onShowTodayTasks, // Add this parameter
     required this.onGeneratePdf,
     required this.onRefresh,
     required this.onSelectAll,
     required this.isAllSelected,
     required this.selectedCount,
     required this.totalTasks,
+    required this.showTodayOnly, // Add this parameter
   });
 
   @override
@@ -578,9 +582,16 @@ class _DashboardSidebarState extends State<DashboardSidebar>
                           tooltip: 'اختيار تاريخ',
                         ),
                         _buildEnhancedActionButton(
+                          icon: Icons.today_rounded,
+                          onPressed: widget.onShowTodayTasks,
+                          tooltip: 'مهام اليوم',
+                          isSpecial: widget.showTodayOnly,
+                        ),
+                        _buildEnhancedActionButton(
                           icon: Icons.view_list_rounded,
                           onPressed: widget.onShowAllTasks,
                           tooltip: 'عرض جميع المهام',
+                          isSpecial: !widget.showTodayOnly,
                         ),
                         _buildEnhancedActionButton(
                           icon: Icons.people_rounded,

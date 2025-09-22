@@ -132,13 +132,10 @@ class _SignupScreenState extends State<SignupScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('تم التسجيل بنجاح! يرجى تسجيل الدخول الآن.'),
+              content: Text('تم انشاء مستخدم بنجاح'),
             ),
           );
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const LoginScreen()),
-          );
+          // Do not navigate to another page, remain on signup
         }
       } else {
         throw Exception('حدث خطأ أثناء تسجيل الحساب.');
