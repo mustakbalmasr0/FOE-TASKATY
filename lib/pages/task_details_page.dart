@@ -65,8 +65,9 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
     _titleController.text = widget.task['title'] ?? '';
     _descriptionController.text = widget.task['description'] ?? '';
 
-    // Use task status from tasks table as primary source
-    _selectedStatus = _taskData['status'] ?? widget.task['status'] ?? 'new';
+    // Initialize status from task data (same source as card)
+    _selectedStatus =
+        widget.task['status'] ?? 'in_progress'; // Use consistent default
     _selectedPriority = widget.task['priority'] ?? 'عادي';
 
     // Safely parse dates, fallback to now if null or invalid
@@ -120,7 +121,8 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
               final newData = payload.newRecord;
               setState(() {
                 _taskData = {..._taskData, ...newData};
-                _selectedStatus = newData['status'] ?? _selectedStatus;
+                // Update status from the real-time data (same source as card)
+                _selectedStatus = newData['status'] ?? 'in_progress';
                 _selectedPriority = newData['priority'] ?? _selectedPriority;
 
                 // Update controllers if not editing
@@ -396,7 +398,8 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
       if (mounted && response != null) {
         setState(() {
           _taskData = response;
-          _selectedStatus = response['status'] ?? 'new';
+          // Use the same status source as the card
+          _selectedStatus = response['status'] ?? 'in_progress';
           _selectedPriority = response['priority'] ?? 'عادي';
 
           // Update controllers with fresh data
@@ -499,7 +502,7 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
   Future<void> _updateTaskAssignments(List<String> newUserIds) async {
     try {
       final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-      
+
       // Remove admin from assignments if accidentally included
       newUserIds.removeWhere((id) => id == currentUserId);
 
@@ -524,15 +527,17 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
 
       // Add new assigned users
       if (usersToAdd.isNotEmpty) {
-        final assignmentInserts = usersToAdd.map((userId) => {
-              'task_id': widget.task['id'],
-              'user_id': userId,
-              'created_at': _startDate?.toIso8601String() ?? 
-                           widget.task['created_at'],
-              'end_at': _endDate?.toIso8601String() ?? 
-                        widget.task['end_at'],
-              'status': _selectedStatus,
-            }).toList();
+        final assignmentInserts = usersToAdd
+            .map((userId) => {
+                  'task_id': widget.task['id'],
+                  'user_id': userId,
+                  'created_at': _startDate?.toIso8601String() ??
+                      widget.task['created_at'],
+                  'end_at':
+                      _endDate?.toIso8601String() ?? widget.task['end_at'],
+                  'status': _selectedStatus,
+                })
+            .toList();
 
         await Supabase.instance.client
             .from('task_assignments')
@@ -592,7 +597,9 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
         _taskData['title'] ?? widget.task['title'] ?? 'بدون عنوان';
     final currentDescription =
         _taskData['description'] ?? widget.task['description'];
-    final currentStatus = _taskData['status'] ?? widget.task['status'] ?? 'new';
+    // Use the same status source as the card - prioritize _selectedStatus which gets updated from real-time
+    final currentStatus =
+        _selectedStatus; // This matches what's shown in the card
     final currentPriority =
         _taskData['priority'] ?? widget.task['priority'] ?? 'عادي';
 
@@ -614,7 +621,7 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                       'assets/background.jpg',
                       fit: BoxFit.cover,
                     ),
-                    // Add status indicator overlay on the title
+                    // Add status indicator overlay on the title - now matches card status
                     Positioned(
                       top: 80,
                       right: 32,
@@ -760,7 +767,7 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                         const SizedBox(height: 24),
                       ],
 
-                      // Status Card - Always visible with current status (animated)
+                      // Status Card - Always visible with current status (animated) - now matches card
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
                         child: _buildStatusCard(context, theme, colorScheme),
@@ -976,7 +983,8 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
                                               color: colorScheme.secondary,
                                               size: 20,
                                             ),
-                                            onPressed: _showUserAssignmentDialog,
+                                            onPressed:
+                                                _showUserAssignmentDialog,
                                             tooltip: 'تعديل التعيينات',
                                             style: IconButton.styleFrom(
                                               backgroundColor: colorScheme
@@ -1120,6 +1128,7 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
 
   Widget _buildStatusCard(
       BuildContext context, ThemeData theme, ColorScheme colorScheme) {
+    // Use _selectedStatus which matches what's displayed in the card
     final statusColor = _getStatusColor(_selectedStatus);
     return AnimatedContainer(
       key: ValueKey(_selectedStatus), // Add key for animation
@@ -1855,13 +1864,13 @@ class _TaskDetailsState extends State<TaskDetailsPage> {
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'completed':
-        return Colors.green.shade600; // Deeper green
+        return const Color(0xFF4CAF50); // Match card colors exactly
       case 'in_progress':
-        return Colors.blue.shade600; // Deeper blue
+        return const Color(0xFF2196F3); // Match card colors exactly
       case 'pending':
-        return Colors.orange.shade600; // Orange for pending
+        return const Color(0xFFFF9800); // Match card colors exactly
       default:
-        return Colors.grey.shade600; // Deeper grey
+        return const Color(0xFF9E9E9E); // Match card colors exactly
     }
   }
 
@@ -2217,7 +2226,8 @@ class _UserAssignmentDialogState extends State<_UserAssignmentDialog> {
             // Selected users count
             if (selectedUserIds.isNotEmpty) ...[
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: colorScheme.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
