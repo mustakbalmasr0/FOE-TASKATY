@@ -40,6 +40,9 @@ class _DashboardPageState extends State<DashboardPage>
   // Add new state variable for today/all filter
   bool _showTodayOnly = true;
 
+  // Add status filter state
+  String? _statusFilter;
+
   // Add real-time channel for tasks
   late RealtimeChannel _tasksChannel;
 
@@ -122,8 +125,15 @@ class _DashboardPageState extends State<DashboardPage>
         return createdAt.isAfter(startOfDay) && createdAt.isBefore(endOfDay);
       }).toList();
 
+      // Apply status filter if active
+      final statusFiltered = _statusFilter != null
+          ? filteredByDate
+              .where((task) => _getTaskStatus(task) == _statusFilter)
+              .toList()
+          : filteredByDate;
+
       // Apply status-based sorting to filtered tasks
-      _filteredTasks = _sortTasksByStatusPriority(filteredByDate);
+      _filteredTasks = _sortTasksByStatusPriority(statusFiltered);
     });
   }
 
@@ -499,12 +509,42 @@ class _DashboardPageState extends State<DashboardPage>
     }
   }
 
+  // New method to filter tasks by status
+  void _filterTasksByStatus(String? status) {
+    setState(() {
+      _statusFilter = status;
+      _selectedTaskIds.clear(); // Clear selections when filter changes
+      _applyCurrentFilter();
+    });
+  }
+
   void _applyCurrentFilter() {
+    List<Map<String, dynamic>> baseTasks;
+
     if (_showTodayOnly) {
-      _filterTasksByToday();
+      final today = DateTime.now();
+      final startOfDay = DateTime(today.year, today.month, today.day);
+      final endOfDay = startOfDay.add(const Duration(days: 1));
+
+      baseTasks = _allTasks.where((task) {
+        if (task['created_at'] == null) return false;
+        final createdAt = DateTime.parse(task['created_at']);
+        return createdAt.isAfter(startOfDay) && createdAt.isBefore(endOfDay);
+      }).toList();
     } else {
-      _filteredTasks = _sortTasksByStatusPriority(_allTasks);
+      baseTasks = _allTasks;
     }
+
+    // Apply status filter if active
+    final statusFiltered = _statusFilter != null
+        ? baseTasks
+            .where((task) => _getTaskStatus(task) == _statusFilter)
+            .toList()
+        : baseTasks;
+
+    setState(() {
+      _filteredTasks = _sortTasksByStatusPriority(statusFiltered);
+    });
   }
 
   void _filterTasksByToday() {
@@ -512,15 +552,27 @@ class _DashboardPageState extends State<DashboardPage>
     final startOfDay = DateTime(today.year, today.month, today.day);
     final endOfDay = startOfDay.add(const Duration(days: 1));
 
-    setState(() {
-      final filteredByDate = _allTasks.where((task) {
-        if (task['created_at'] == null) return false;
-        final createdAt = DateTime.parse(task['created_at']);
-        return createdAt.isAfter(startOfDay) && createdAt.isBefore(endOfDay);
-      }).toList();
+    final filteredByDate = _allTasks.where((task) {
+      if (task['created_at'] == null) return false;
+      final createdAt = DateTime.parse(task['created_at']);
+      return createdAt.isAfter(startOfDay) && createdAt.isBefore(endOfDay);
+    }).toList();
 
-      _filteredTasks = _sortTasksByStatusPriority(filteredByDate);
+    // Apply status filter if active
+    final statusFiltered = _statusFilter != null
+        ? filteredByDate
+            .where((task) => _getTaskStatus(task) == _statusFilter)
+            .toList()
+        : filteredByDate;
+
+    setState(() {
+      _filteredTasks = _sortTasksByStatusPriority(statusFiltered);
     });
+  }
+
+  // Add method to get task status consistently
+  String _getTaskStatus(Map<String, dynamic> task) {
+    return task['status'] ?? 'in_progress';
   }
 
   @override
@@ -718,54 +770,74 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Widget _buildStatItem(
-      String label, String value, IconData icon, Color color, ThemeData theme) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(16), // Increased from 12
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(16), // Increased from 12
-          ),
-          child: Icon(icon, color: color, size: 36), // Increased from 28
+      String label, String value, IconData icon, Color color, ThemeData theme,
+      {VoidCallback? onTap, bool isActive = false}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isActive ? color.withOpacity(0.2) : color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: isActive ? Border.all(color: color, width: 2) : null,
         ),
-        const SizedBox(height: 16), // Increased from 12
-        Text(
-          value,
-          style: theme.textTheme.headlineMedium?.copyWith(
-            // Changed from headlineSmall
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 36),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              value,
+              style: theme.textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.w500,
+                color: isActive ? color : null,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            if (onTap != null) const SizedBox(height: 4),
+            if (onTap != null)
+              Text(
+                'انقر للتصفية',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: color.withOpacity(0.7),
+                  fontSize: 10,
+                ),
+              ),
+          ],
         ),
-        const SizedBox(height: 8), // Increased from 4
-        Text(
-          label,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            // Changed from bodySmall
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
   Widget _buildStatsCard(ColorScheme colorScheme, ThemeData theme,
       List<Map<String, dynamic>> tasks) {
-    final completedTasks = tasks.where((task) {
+    final completedTasks = _allTasks.where((task) {
       return task['status'] == 'completed';
     }).length;
 
-    final inProgressTasks = tasks.where((task) {
+    final inProgressTasks = _allTasks.where((task) {
       return task['status'] == 'in_progress' || task['status'] == null;
     }).length;
 
     return Card(
-      margin: const EdgeInsets.all(20), // Increased from 16
-      elevation: 12, // Increased from 8
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24)), // Increased from 20
+      margin: const EdgeInsets.all(20),
+      elevation: 12,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -776,45 +848,83 @@ class _DashboardPageState extends State<DashboardPage>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(24), // Increased from 20
+          borderRadius: BorderRadius.circular(24),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(28), // Increased from 20
+          padding: const EdgeInsets.all(28),
           child: Column(
             children: [
-              // Show appropriate header based on current filter
+              // Show appropriate header with clear filter option
               Container(
-                margin: const EdgeInsets.only(bottom: 24), // Increased from 16
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 12), // Increased padding
-                decoration: BoxDecoration(
-                  color: colorScheme.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16), // Increased from 12
-                ),
-                child: Text(
-                  _selectedDay != null
-                      ? 'مهام يوم ${_formatDate(_selectedDay.toString())}'
-                      : _showTodayOnly
-                          ? 'مهام اليوم'
-                          : 'جميع المهام',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    // Changed from titleMedium
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
+                margin: const EdgeInsets.only(bottom: 24),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          _selectedDay != null
+                              ? 'مهام يوم ${_formatDate(_selectedDay.toString())}'
+                              : _showTodayOnly
+                                  ? 'مهام اليوم'
+                                  : 'جميع المهام',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (_statusFilter != null) ...[
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: () => _filterTasksByStatus(null),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.clear, color: Colors.red, size: 16),
+                              const SizedBox(width: 4),
+                              Text(
+                                'إلغاء التصفية',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              // Updated stats grid with only two categories
+              // Updated stats grid with clickable items
               Wrap(
-                spacing: 24, // Increased from 16
-                runSpacing: 24, // Increased from 16
+                spacing: 24,
+                runSpacing: 24,
                 children: [
                   _buildStatItem(
                     'إجمالي المهام',
-                    tasks.length.toString(),
+                    _allTasks.length.toString(),
                     Icons.assignment,
                     colorScheme.primary,
                     theme,
+                    onTap: () => _filterTasksByStatus(null),
+                    isActive: _statusFilter == null,
                   ),
                   _buildStatItem(
                     'قيد التنفيذ',
@@ -822,6 +932,8 @@ class _DashboardPageState extends State<DashboardPage>
                     Icons.pending_actions,
                     colorScheme.secondary,
                     theme,
+                    onTap: () => _filterTasksByStatus('in_progress'),
+                    isActive: _statusFilter == 'in_progress',
                   ),
                   _buildStatItem(
                     'تم التنفيذ',
@@ -829,9 +941,33 @@ class _DashboardPageState extends State<DashboardPage>
                     Icons.task_alt,
                     Colors.green,
                     theme,
+                    onTap: () => _filterTasksByStatus('completed'),
+                    isActive: _statusFilter == 'completed',
                   ),
                 ],
               ),
+              // Add status filter indicator
+              if (_statusFilter != null)
+                Container(
+                  margin: const EdgeInsets.only(top: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _statusFilter == 'completed'
+                        ? Colors.green.withOpacity(0.1)
+                        : colorScheme.secondary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'تصفية حسب: ${_getStatusText(_statusFilter!)}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: _statusFilter == 'completed'
+                          ? Colors.green
+                          : colorScheme.secondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
